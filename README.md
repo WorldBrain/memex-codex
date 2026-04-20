@@ -7,13 +7,11 @@ You can save, transcribe, summarize and search anything you come across. Website
 ## How to install
 
 1. [Download](https://github.com/WorldBrain/memex-codex/raw/main/memex-garden-codex-plugin.zip) the plugin
-2. Extract the zip, or clone this repo and use it directly.
+2. Extract the zip, or clone the standalone repo and use it directly.
 3. Start Codex from the extracted directory or repo root.
 4. Open Codex's plugin directory.
-5. Select the `Memex Plugins` marketplace.
-6. Install `memex-codex`.
-7. Export credentials before launching Codex, then restart Codex if needed.
-8. You're done. You can now use Memex inside Codex.
+5. Export credentials before launching Codex, then restart Codex if needed.
+6. You're done. You can now use Memex inside Codex.
 
 ## Example prompts
 
@@ -67,7 +65,6 @@ Behavior and disclosures:
 - The plugin sends Memex-authenticated requests to the hosted Memex MCP server.
 - The plugin does not bundle local model inference or a local MCP wrapper.
 - The skill is scoped to Memex library search and Memex URL saves.
-- The repo bundles a local Codex marketplace file at `.agents/plugins/marketplace.json` that points to `./memex-codex`.
 - The plugin uses the same public Memex docs as other Memex agent integrations:
     - [Available endpoints](https://docs.memex.garden/general/available-endpoints)
     - [Response shape](https://docs.memex.garden/general/response-shape)
