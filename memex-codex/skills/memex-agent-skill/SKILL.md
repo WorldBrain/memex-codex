@@ -44,3 +44,4 @@ Use Memex only for tasks involving the user's Memex library or when the user exp
 - Not authenticated: https://docs.memex.garden/general/authentication
 - Out of credits: https://docs.memex.garden/general/buy-credits
 - Malformed request or unknown parameter: re-read https://docs.memex.garden/general/available-endpoints and retry with the documented field names.
+
