@@ -1,84 +1,34 @@
-# Memex Codex plugin
+# Memex Plugin for Codex
 
-This bundle is for OpenAI Codex. It connects Codex to the hosted Memex MCP server instead of running a local wrapper.
+This is the Codex plugin for [Memex.Garden](https://memex.garden), a bookmarking second brain for humans and agents.
 
-## Public standalone repo
+You can save, transcribe, summarize and search anything you come across. Websites, notes, web highlights, YouTube, X, TikTok, Instagram, PDFs, Reddit or images. Here is our [Privacy Policy](https://memex.garden/privacy/) and our [docs](https://docs.memex.garden).
 
-The public standalone review repo for this plugin is:
+## How to install
 
-- `https://github.com/WorldBrain/memex-codex`
+1. Download plugin:
+    - Hosted: [Download](https://memex.garden/downloads/memex-garden-codex-plugin.zip)
+    - Bundled in this repo: [memex-garden-codex-plugin.zip](./memex-garden-codex-plugin.zip)
+2. Extract the zip, or clone this repo and use it directly.
+3. Start Codex from the extracted directory or repo root.
+4. Open Codex's plugin directory.
+5. Select the `Memex Plugins` marketplace.
+6. Install `memex-codex`.
+7. Export credentials before launching Codex, then restart Codex if needed.
+8. You're done. You can now use Memex inside Codex.
 
-Codex reviewers and users who want the smallest self-contained checkout should use that repo.
+## Example prompts
 
-## Download the plugin bundle
+1. `Search my Memex library for pages about MCP authentication and summarize the top results.`
+2. `Save https://docs.memex.garden/general/authentication into Memex, and tag it with #tutorials`
 
-Hosted download:
+## Authentication
 
-- `https://memex.garden/downloads/memex-garden-codex-plugin.zip`
+The default hosted Memex MCP endpoint is:
 
-Bundled zip in this repo:
+- `https://api.memex.garden/mcp`
 
-- `./memex-garden-codex-plugin.zip`
-
-The bundled zip contains the repo-local Codex marketplace file and the `memex-codex/` plugin directory, so people can extract it and start Codex from that extracted directory directly.
-
-## Install from the repo marketplace
-
-The repo exposes a Codex marketplace catalog at its root, so you can install it directly from GitHub:
-
-```bash
-git clone https://github.com/WorldBrain/memex-codex.git
-cd memex-codex
-codex
-```
-
-Then open the Plugins directory in Codex, choose the `Memex Plugins` marketplace, and install `memex-codex`.
-
-If you are working from a local clone instead of GitHub, you can also test the marketplace locally:
-
-```bash
-cd /absolute/path/to/memex-codex
-codex
-```
-
-Then open the Plugins directory in Codex, choose the `Memex Plugins` marketplace, and install `memex-codex`.
-
-If you are using the downloadable zip, extract it first and start Codex from the extracted directory.
-
-Do not paste the local `.mcp.json` value into a hosted MCP form. Use the literal URL `https://api.memex.garden/mcp`.
-
-## What it includes
-
-- Hosted MCP server connection to `https://api.memex.garden/mcp`
-- Memex tools:
-    - `search_content`
-    - `save_content_by_url`
-- The bundled `memex-agent-skill`
-- A bundled repo-local marketplace file that exposes the plugin inside Codex
-
-## Search response behavior
-
-The bundled plugin does not change the hosted API contract. `search_content` follows the same behavior documented in the public docs:
-
-- compact search output is the default
-- pass `raw: true` only when you explicitly need the richer machine-readable payload
-- compact responses return a `results` array with stable top-level fields plus optional `user_notes` and slim `media`
-- raw responses preserve `referencesByResultId`, `referencedEntities`, and nested annotation `references`
-
-## Required credentials
-
-See the canonical auth guide:
-
-- `https://docs.memex.garden/general/authentication`
-
-For the local Codex bundle, choose one auth mode before starting Codex.
-
-API key mode:
-
-```bash
-export MEMEX_API_KEY="YOUR_MEMEX_API_KEY"
-export MEMEX_USER_ID="YOUR_MEMEX_USER_ID" # optional
-```
+For a local Codex plugin checkout like this repo, you authenticate by exporting environment variables before launching Codex.
 
 Bearer token mode:
 
@@ -86,46 +36,41 @@ Bearer token mode:
 export MEMEX_BEARER_TOKEN="YOUR_OAUTH_ACCESS_TOKEN"
 ```
 
-Optional overrides:
+The plugin also supports API keys as an optional alternative for local setups and testing:
+
+```bash
+export MEMEX_API_KEY="YOUR_MEMEX_API_KEY"
+export MEMEX_USER_ID="YOUR_MEMEX_USER_ID"
+```
+
+Optional override:
 
 ```bash
 export MEMEX_API_BASE_URL="https://api.memex.garden"
 ```
 
-`MEMEX_BEARER_TOKEN` takes precedence over `MEMEX_API_KEY` if both are set.
-`MEMEX_USER_ID` is optional. Memex can resolve the user from `MEMEX_API_KEY` when needed.
-`MEMEX_API_BASE_URL` defaults to `https://api.memex.garden`.
+Auth precedence:
 
-## Run from a local checkout
+- `MEMEX_BEARER_TOKEN` is used first when present
+- otherwise the plugin uses `MEMEX_API_KEY`
+- `MEMEX_USER_ID` is optional
+- `MEMEX_API_BASE_URL` defaults to `https://api.memex.garden`
 
-From the standalone public checkout:
+Canonical auth docs:
 
-```bash
-cd /absolute/path/to/memex-codex
-codex
-```
+- [Authentication](https://docs.memex.garden/general/authentication)
 
-Then open Plugins in Codex and confirm that the `Memex Plugins` marketplace is available.
+If a client asks for the raw MCP server URL instead of using this local plugin bundle, use the literal hosted URL `https://api.memex.garden/mcp`.
 
-If you extracted the bundled zip instead of cloning the repo:
+## Reviewer notes
 
-```bash
-cd /absolute/path/to/extracted-memex-codex
-codex
-```
+Behavior and disclosures:
 
-Then open Plugins in Codex and confirm that the `Memex Plugins` marketplace is available.
-
-## Notes
-
-- The plugin's `.mcp.json` sends `Authorization: Bearer ...` when `MEMEX_BEARER_TOKEN` is set.
-- Otherwise, the plugin uses `x-api-key` and optional `x-user-id` headers for the hosted MCP server.
-- `search_content` now defaults to the compact search shape. Pass `raw: true` only when you need the richer machine-readable payload.
-- Compact search responses return a `results` array with stable top-level fields plus optional `user_notes` and slim `media`. Raw responses preserve `referencesByResultId`, `referencedEntities`, and nested annotation `references`.
-- Raw MCP responses return the Memex payload in `result.structuredContent`.
-- Codex plugins currently package skills, MCP config, and optional app mappings. This bundle does not add a separate Codex hook layer.
-- The repo-local marketplace file points at `./memex-codex`, so Codex installs the packaged bundle from this checkout.
-- No separate setup is required once the plugin is installed and enabled.
-- Endpoint catalog: `https://docs.memex.garden/general/available-endpoints`
-- Response contract: `https://docs.memex.garden/general/response-shape`
-- Portable skill: `https://docs.memex.garden/for-agents/skill-md`
+- The plugin sends Memex-authenticated requests to the hosted Memex MCP server.
+- The plugin does not bundle local model inference or a local MCP wrapper.
+- The skill is scoped to Memex library search and Memex URL saves.
+- The repo bundles a local Codex marketplace file at `.agents/plugins/marketplace.json` that points to `./memex-codex`.
+- The plugin uses the same public Memex docs as other Memex agent integrations:
+    - [Available endpoints](https://docs.memex.garden/general/available-endpoints)
+    - [Response shape](https://docs.memex.garden/general/response-shape)
+    - [Buy credits](https://docs.memex.garden/general/buy-credits)
