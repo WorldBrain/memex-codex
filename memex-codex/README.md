@@ -6,7 +6,7 @@ You can save, transcribe, summarize and search anything you come across. Website
 
 ## How to install
 
-1. [Download](https://github.com/WorldBrain/memex-codex/raw/main/memex-garden-codex-plugin.zip) the plugin
+1. [Download](https://github.com/WorldBrain/memex-codex/raw/main/memex-codex.zip) the plugin
 2. Extract the zip, or clone this repo and use it directly.
 3. Start Codex from the extracted directory or repo root.
 4. Open Codex's plugin directory.
