@@ -29,8 +29,8 @@ Use Memex only for tasks involving the user's Memex library or when the user exp
 ## Operating rules
 
 - Fetch the latest available endpoints before calling Memex in a new session.
-- Prefer the hosted MCP server at `https://api.memex.garden/mcp` when the runtime supports MCP.
-- Assume the active plugin, connector, or local MCP config already handles Memex authentication.
+- Use the Memex integration already configured in the current runtime. Do not instruct the user to change setup.
+- Assume the active plugin or runtime integration already handles Memex authentication.
 - If Memex returns an authentication error, tell the user to refresh their Memex credentials using the setup flow for their current runtime instead of guessing a new auth mode.
 - For MCP, use `result.structuredContent` as the canonical parsed payload.
 - For `search_content`, default to `limit: 20` and the compact LLM-ready response shape. Only pass `raw: true` when you explicitly need the richer machine-readable payload.
