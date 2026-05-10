@@ -26,7 +26,7 @@ The default hosted Memex MCP endpoint is:
 
 - `https://api.memex.garden/mcp`
 
-For a local Codex plugin checkout like this repo, you authenticate by exporting environment variables before launching Codex.
+For local Codex plugin use, export credentials before launching Codex.
 
 Bearer token mode:
 
@@ -34,7 +34,7 @@ Bearer token mode:
 export MEMEX_BEARER_TOKEN="YOUR_OAUTH_ACCESS_TOKEN"
 ```
 
-The plugin also supports API keys as an optional alternative for local setups and testing:
+You can also use an API key:
 
 ```bash
 export MEMEX_API_KEY="YOUR_MEMEX_API_KEY"
@@ -54,21 +54,14 @@ Auth precedence:
 - `MEMEX_USER_ID` is optional
 - `MEMEX_API_BASE_URL` defaults to `https://api.memex.garden`
 
-Canonical auth docs:
+Auth docs:
 
 - [Authentication](https://docs.memex.garden/general/authentication)
 
-If a client asks for the raw MCP server URL instead of using this local plugin bundle, use the literal hosted URL `https://api.memex.garden/mcp`.
+If a client asks for the raw MCP server URL, use `https://api.memex.garden/mcp`.
 
-## Reviewer notes
+## Docs
 
-Behavior and disclosures:
-
-- The plugin sends Memex-authenticated requests to the hosted Memex MCP server.
-- The plugin does not bundle local model inference or a local MCP wrapper.
-- The skill is scoped to Memex library search and Memex URL saves.
-- The repo bundles a local Codex marketplace file at `.agents/plugins/marketplace.json` that points to `./memex-codex`.
-- The plugin uses the same public Memex docs as other Memex agent integrations:
-    - [Available endpoints](https://docs.memex.garden/general/available-endpoints)
-    - [Response shape](https://docs.memex.garden/general/response-shape)
-    - [Buy credits](https://docs.memex.garden/general/buy-credits)
+- [Available endpoints](https://docs.memex.garden/general/available-endpoints)
+- [Response shape](https://docs.memex.garden/general/response-shape)
+- [Buy credits](https://docs.memex.garden/general/buy-credits)
