@@ -10,13 +10,7 @@
     "homepage": "https://docs.memex.garden/for-agents/codex-plugin",
     "repository": "https://github.com/WorldBrain/memex-codex",
     "license": "MIT",
-    "keywords": [
-        "memex",
-        "mcp",
-        "codex",
-        "search",
-        "knowledge-management"
-    ],
+    "keywords": ["memex", "mcp", "codex", "search", "knowledge-management"],
     "skills": "./skills/",
     "mcpServers": "./.mcp.json",
     "interface": {
@@ -25,10 +19,7 @@
         "longDescription": "Connect Codex to the hosted Memex MCP server so it can search saved content and save public URLs with the bundled memex-agent-skill.",
         "developerName": "Memex",
         "category": "Productivity",
-        "capabilities": [
-            "Read",
-            "Write"
-        ],
+        "capabilities": ["Read", "Write"],
         "websiteURL": "https://memex.garden",
         "privacyPolicyURL": "https://memex.garden/privacy/",
         "termsOfServiceURL": "https://memex.garden/terms/",
