@@ -24,6 +24,9 @@ Use Memex only for tasks involving the user's Memex library or when the user exp
 
 - Search content already saved in Memex.
 - Save a public URL into Memex so it becomes searchable later.
+- Create and list public sharing links for saved Memex content when the user asks to share or inspect shared items.
+- List the user's subscribed feeds and search within one feed, selected feeds, or all subscribed feeds.
+- Read or create the user's auto-tagging rules when they explicitly ask to inspect or configure automatic tagging.
 - Work with Memex-native content such as web pages, annotations, tweets, YouTube videos, images, and related saved entities.
 
 ## Operating rules
@@ -34,7 +37,11 @@ Use Memex only for tasks involving the user's Memex library or when the user exp
 - If Memex returns an authentication error, tell the user to refresh their Memex credentials using the setup flow for their current runtime instead of guessing a new auth mode.
 - If Memex returns insufficient credits, fetch the available plans and ask the human which plan to use. For one-time plans, use the runtime payment harness to issue a Stripe Shared Payment Token, then call authenticated `POST /checkout` with the user's Memex bearer token and the token. For subscription plans, send the user to https://memex.garden/pricing.
 - For MCP, use `result.structuredContent` as the parsed payload.
-- For `search_content`, default to `limit: 20` and the compact LLM-ready response shape. Only pass `raw: true` when you explicitly need the richer machine-readable payload.
+- For MCP sharing links, use `create_sharing_link` to create or update a public link and `list_sharing_links` to inspect existing links. Both use `access: "view" | "collaborate"` for API-facing access names.
+- For subscribed feeds, use `list_subscribed_feeds` to fetch feed IDs. To search specific feeds with `search_content`, pass `feedIds`. To search all subscribed feeds only, pass `feedScope: "all"`. Omit both `feedIds` and `feedScope` to search the full library.
+- For saved views in MCP or Claude, search private views with `search_content` and `viewIds`. Use `raw: false` or omit `raw` for the `llm` response option. Use `raw: true` for the `full` response option.
+- To create or list saved views, use authenticated REST `POST /create-view` and `POST /list-views`. Use REST `POST /execute-view-search` only when the full/raw shape is acceptable or when searching a public shared view token.
+- For `search_content`, default to `limit: 20` and the `llm`/compact response shape. Use `llm` by omitting `raw` or passing `raw: false`; use `full` by passing `raw: true` only when you need the richer machine-readable payload.
 - Compact search responses are keyed by document URL and can include `user_notes`. Raw search responses preserve `referencesByResultId`, `referencedEntities`, and nested annotation `references`.
 - For REST, expect the top-level response shapes documented above.
 - When Memex search results include a `url`, use that URL as the default citation/reference in your answer.
