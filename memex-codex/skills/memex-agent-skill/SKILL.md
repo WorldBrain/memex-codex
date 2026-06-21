@@ -9,18 +9,21 @@ description: Index new URLs into Memex and search saved websites, annotations, t
 
 Use Memex only for tasks involving the user's Memex library or when the user explicitly wants to save new public content into Memex.
 
-## Startup checklist
+Do not use Memex for general web search or facts outside the user's saved library.
+
+## Start Every Memex Run
 
 1. Before the first Memex request in a new session, fetch the latest endpoint catalog:
    https://docs.memex.garden/general/available-endpoints
-2. If Memex authentication is missing or stale, tell the user to refresh or regenerate their Memex credentials using the setup flow for their current runtime:
+2. Use the Memex integration already configured in the current runtime.
+3. If authentication is missing or stale, tell the user to refresh or regenerate credentials using:
    https://docs.memex.garden/general/authentication
-3. Parse Memex responses using:
+4. Parse responses using:
    https://docs.memex.garden/general/response-shape
-4. If a request fails because of insufficient credits, follow:
+5. If a request fails because of insufficient credits, follow:
    https://docs.memex.garden/general/buy-credits
 
-## When to use Memex
+## Choose The Runbook
 
 - Search content already saved in Memex.
 - Save a public URL into Memex so it becomes searchable later.
@@ -29,23 +32,54 @@ Use Memex only for tasks involving the user's Memex library or when the user exp
 - Read or create the user's auto-tagging rules when they explicitly ask to inspect or configure automatic tagging.
 - Work with Memex-native content such as web pages, annotations, tweets, YouTube videos, images, and related saved entities.
 
-## Operating rules
+## Search Saved Content
 
-- Fetch the latest available endpoints before calling Memex in a new session.
-- Use the Memex integration already configured in the current runtime. Do not instruct the user to change setup.
-- Assume the active plugin or runtime integration already handles Memex authentication.
-- If Memex returns an authentication error, tell the user to refresh their Memex credentials using the setup flow for their current runtime instead of guessing a new auth mode.
-- If Memex returns insufficient credits, fetch the available plans and ask the human which plan to use. For one-time plans, use the runtime payment harness to issue a Stripe Shared Payment Token, then call authenticated `POST /checkout` with the user's Memex bearer token and the token. For subscription plans, send the user to https://memex.garden/pricing.
-- For MCP, use `result.structuredContent` as the parsed payload.
-- For MCP sharing links, use `create_sharing_link` to create or update a public link and `list_sharing_links` to inspect existing links. Both use `access: "view" | "collaborate"` for API-facing access names.
-- For subscribed feeds, use `list_subscribed_feeds` to fetch feed IDs. To search specific feeds with `search_content`, pass `feedIds`. To search all subscribed feeds only, pass `feedScope: "all"`. Omit both `feedIds` and `feedScope` to search the full library.
-- For saved views in MCP or Claude, search private views with `search_content` and `viewIds`. Use `raw: false` or omit `raw` for the `llm` response option. Use `raw: true` for the `full` response option.
-- To create or list saved views, use authenticated REST `POST /create-view` and `POST /list-views`. Use REST `POST /execute-view-search` only when the full/raw shape is acceptable or when searching a public shared view token.
-- For `search_content`, default to `limit: 20` and the `llm`/compact response shape. Use `llm` by omitting `raw` or passing `raw: false`; use `full` by passing `raw: true` only when you need the richer machine-readable payload.
-- Compact search responses are keyed by document URL and can include `user_notes`. Raw search responses preserve `referencesByResultId`, `referencedEntities`, and nested annotation `references`.
-- For REST, expect the top-level response shapes documented above.
-- When Memex search results include a `url`, use that URL as the default citation/reference in your answer.
-- Do not use Memex for general web search or facts outside the user's saved library.
+1. Call `search_content` with the user's query.
+2. Default to `limit: 20`.
+3. Request the compact `llm` response shape by omitting `raw` or setting `raw: false`.
+4. Use `raw: true` only when the task needs richer machine-readable references.
+5. For MCP results, read `result.structuredContent`.
+6. Cite result URLs when a `url` is present.
+
+## Save Public Content
+
+1. Confirm the user provided a public URL or explicitly asked to save public content.
+2. Use the documented save/index endpoint or MCP tool from the latest endpoint catalog.
+3. Include only user-requested tags, metadata, or notes.
+4. Report the saved item URL or returned Memex identifier.
+5. Do not claim the item is searchable until Memex reports successful indexing or processing.
+
+## Create Or Inspect Sharing Links
+
+1. Use `list_sharing_links` when the user asks what is already shared.
+2. Use `create_sharing_link` when the user asks to share saved content.
+3. Set API access as `access: "view"` or `access: "collaborate"`.
+4. Return the public link and access level.
+
+## Search Feeds
+
+1. Call `list_subscribed_feeds` to fetch feed IDs.
+2. To search selected feeds, call `search_content` with `feedIds`.
+3. To search all subscribed feeds only, call `search_content` with `feedScope: "all"`.
+4. To search the full library, omit both `feedIds` and `feedScope`.
+
+## Search Or Manage Saved Views
+
+1. To search private saved views in MCP or Claude, call `search_content` with `viewIds`.
+2. Use `raw: false` or omit `raw` for normal answer-writing.
+3. Use authenticated REST `POST /create-view` to create views.
+4. Use authenticated REST `POST /list-views` to list views.
+5. Use REST `POST /execute-view-search` only when full/raw output is acceptable or when searching a public shared view token.
+
+## Handle Failures
+
+1. Authentication error: tell the user to refresh credentials with https://docs.memex.garden/general/authentication.
+2. Insufficient credits:
+   - Fetch available plans.
+   - Ask the human which plan to use.
+   - For one-time plans, use the runtime payment harness to issue a Stripe Shared Payment Token, then call authenticated `POST /checkout` with the user's Memex bearer token and token.
+   - For subscription plans, send the user to https://memex.garden/pricing.
+3. Malformed request or unknown parameter: re-read https://docs.memex.garden/general/available-endpoints and retry with documented field names.
 
 ## Troubleshooting
 
