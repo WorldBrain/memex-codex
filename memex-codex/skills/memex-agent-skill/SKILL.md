@@ -1,6 +1,6 @@
 ---
 name: memex-agent-skill
-description: Index new URLs into Memex and search saved websites, annotations, tweets, YouTube videos, images, and related library content.
+description: Search and save Memex library content, and fetch, process, or drain pending Memex handoffs for manual slash-command use or agent automation.
 ---
 
 # Memex agent skill
@@ -13,14 +13,13 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 ## Start Every Memex Run
 
-1. Before the first Memex request in a new session, fetch the latest endpoint catalog:
-   https://docs.memex.garden/general/available-endpoints
-2. Use the Memex integration already configured in the current runtime.
-3. If authentication is missing or stale, tell the user to refresh or regenerate credentials using:
-   https://docs.memex.garden/general/authentication
-4. Parse responses using:
+1. Use the Memex integration already configured in the current runtime.
+2. For handoff-only prompts or `/memex:fetch-handoffs`, call the configured MCP `list_handoffs` tool first. Do not fetch endpoint catalogs, search web docs, inspect environment credentials, or probe raw REST before attempting the MCP handoff tool.
+3. If authentication is missing or stale in interactive Codex, run `codex mcp login memex`; if it prints an authorize URL, open it with the local browser command available in the runtime, such as `open '<authorize-url>'` on macOS. Stop after opening OAuth and tell the user to complete sign-in, then start a new thread.
+4. In unattended automation or clients that cannot run local commands/open a browser, tell the user to refresh or regenerate credentials using the client OAuth flow. In Codex CLI, run `codex mcp login memex`; in clients with plugin auth UI, connect Memex when prompted. Use https://docs.memex.garden/general/authentication only as fallback docs.
+5. Parse responses using:
    https://docs.memex.garden/general/response-shape
-5. If a request fails because of insufficient credits, follow:
+6. If a request fails because of insufficient credits, follow:
    https://docs.memex.garden/general/buy-credits
 
 ## Choose The Runbook
@@ -29,8 +28,19 @@ Do not use Memex for general web search or facts outside the user's saved librar
 - Save a public URL into Memex so it becomes searchable later.
 - Create and list public sharing links for saved Memex content when the user asks to share or inspect shared items.
 - List the user's subscribed feeds and search within one feed, selected feeds, or all subscribed feeds.
+- Fetch pending or time-filtered handoffs when the user asks what needs to be processed, handed off, shared, routed, or handled by an agent.
 - Read or create the user's auto-tagging rules when they explicitly ask to inspect or configure automatic tagging.
 - Work with Memex-native content such as web pages, annotations, tweets, YouTube videos, images, and related saved entities.
+
+## Manual And Automation Use
+
+- Manual invocation: this skill must work when selected from an agent's skill or slash-command UI, including Codex and Claude plugin skill shortcuts.
+- Automation invocation: this skill must also work when an unattended Codex or Claude automation prompt asks to process Memex handoffs.
+- If the prompt is only about handoffs, skip unrelated runbooks and start at "Process Handoffs".
+- Prefer OAuth-based Memex connection. Do not ask first-time users for API keys
+  unless OAuth is unavailable in the current client.
+- In automation mode, avoid asking follow-up questions unless authentication is missing or processing would require an irreversible external action not described in the handoff.
+- Return a compact summary with processed, skipped, failed, and drained handoff IDs.
 
 ## Search Saved Content
 
@@ -62,6 +72,19 @@ Do not use Memex for general web search or facts outside the user's saved librar
 2. To search selected feeds, call `search_content` with `feedIds`.
 3. To search all subscribed feeds only, call `search_content` with `feedScope: "all"`.
 4. To search the full library, omit both `feedIds` and `feedScope`.
+
+## Process Handoffs
+
+1. Call `list_handoffs` when the user asks for pending handoffs, unprocessed handoffs, agent handoffs, routing cues, or handoffs in a time frame.
+2. Omit `status` by default. This lists pending/unprocessed handoffs, including items that are not ready for webhook delivery.
+3. Use `referenceContentEntityId` when a referenced Memex content entity is known.
+4. Use `createdAtFrom` and `createdAtTo` for an arbitrary ISO timestamp range, or `day` for a single `YYYY-MM-DD` day.
+5. Use `requestedDestinationText` to filter to a target app, agent, or person, such as Codex, Claude, OpenClaw, Hermes, Cursor, Devin, GitHub Copilot, Factory Droid, Jules, Replit Agent, Warp Oz, Obsidian, or a teammate.
+6. For each returned handoff, read `title`, `descriptionMarkdown`, `timingText`, `requestedDestinationText`, and `referenceContentEntityIds`.
+7. Process only handoffs this agent can actually complete in the current runtime. Leave unsupported or unsafe handoffs undrained and report why.
+8. Call `drain_handoff` only after the current agent has actually completed that handoff. Include the handoff ID and, when supported, identify the current agent in `processingTarget` or response metadata.
+9. Do not call `drain_handoff` merely because a handoff was listed, inspected, summarized, queued elsewhere, or could not be completed.
+10. For automation runs, continue through all processable handoffs and finish with a compact machine-readable summary.
 
 ## Search Or Manage Saved Views
 

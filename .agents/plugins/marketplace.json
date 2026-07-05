@@ -5,7 +5,7 @@
     },
     "plugins": [
         {
-            "name": "memex-codex",
+            "name": "memex",
             "source": {
                 "source": "local",
                 "path": "./memex-codex"
