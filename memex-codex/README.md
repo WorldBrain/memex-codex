@@ -39,7 +39,11 @@ The default hosted Memex MCP endpoint is:
 - `https://api.memex.garden/mcp`
 
 Authentication is OAuth-first. When the plugin calls Memex for the first time,
-your client should start the Memex sign-in flow. In Codex CLI, use:
+your client should start the Memex sign-in flow. OAuth clients should register
+as `Memex Codex plugin` and, when custom registration metadata is supported,
+include `memex_client_source: "memex_codex_plugin"` so Memex can show the
+connection as this plugin rather than a generic Codex cloud agent. In Codex
+CLI, use:
 
 ```bash
 codex mcp login memex

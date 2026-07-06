@@ -38,6 +38,10 @@ OAuth flow when it is offered. In Codex, do not fall back to raw REST,
 environment-token probing, endpoint-catalog lookup, or web search before OAuth
 has been attempted.
 
+When the client can control OAuth dynamic registration metadata, register this
+connection as `client_name: "Memex Codex plugin"` and include
+`memex_client_source: "memex_codex_plugin"`.
+
 For interactive Codex slash-command use, if `list_handoffs` is not exposed
 because Memex is not logged in, start OAuth instead of continuing with fallback
 probing:
