@@ -76,15 +76,16 @@ Do not use Memex for general web search or facts outside the user's saved librar
 ## Process Handoffs
 
 1. Call `list_handoffs` when the user asks for pending handoffs, unprocessed handoffs, agent handoffs, routing cues, or handoffs in a time frame.
-2. Omit `status` by default. This lists pending/unprocessed handoffs, including items that are not ready for webhook delivery.
+2. Omit `status` and `readyOnly` by default. This lists approved pending handoffs that are ready for plugin processing.
 3. Use `referenceContentEntityId` when a referenced Memex content entity is known.
 4. Use `createdAtFrom` and `createdAtTo` for an arbitrary ISO timestamp range, or `day` for a single `YYYY-MM-DD` day.
 5. Use `requestedDestinationText` to filter to a target app, agent, or person, such as Codex, Claude, OpenClaw, Hermes, Cursor, Devin, GitHub Copilot, Factory Droid, Jules, Replit Agent, Warp Oz, Obsidian, or a teammate.
-6. For each returned handoff, read `title`, `descriptionMarkdown`, `timingText`, `requestedDestinationText`, and `referenceContentEntityIds`.
-7. Process only handoffs this agent can actually complete in the current runtime. Leave unsupported or unsafe handoffs undrained and report why.
-8. Call `drain_handoff` only after the current agent has actually completed that handoff. Include the handoff ID and, when supported, identify the current agent in `processingTarget` or response metadata.
-9. Do not call `drain_handoff` merely because a handoff was listed, inspected, summarized, queued elsewhere, or could not be completed.
-10. For automation runs, continue through all processable handoffs and finish with a compact machine-readable summary.
+6. Pass `readyOnly: false` only when the user explicitly asks to inspect unapproved or draft handoffs; do not process or drain those by default.
+7. For each returned handoff, read `title`, `descriptionMarkdown`, `timingText`, `requestedDestinationText`, and `referenceContentEntityIds`.
+8. Process only handoffs this agent can actually complete in the current runtime. Leave unsupported or unsafe handoffs undrained and report why.
+9. Call `drain_handoff` only after the current agent has actually completed that handoff. Include the handoff ID and, when supported, identify the current agent in `processingTarget` or response metadata.
+10. Do not call `drain_handoff` merely because a handoff was listed, inspected, summarized, queued elsewhere, or could not be completed.
+11. For automation runs, continue through all processable handoffs and finish with a compact machine-readable summary.
 
 ## Search Or Manage Saved Views
 
