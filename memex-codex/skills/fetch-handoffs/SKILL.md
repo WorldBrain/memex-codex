@@ -18,11 +18,12 @@ description: Fetch unprocessed Memex handoffs through the Memex list_handoffs en
 
 1. Read and follow `../memex-agent-skill/SKILL.md`.
 2. Use the "Process Handoffs" runbook from that shared skill unless the user explicitly asks for a broader Memex task.
-3. For slash-command or automation use, call the configured Memex MCP `list_handoffs` tool first. Do not search endpoint catalogs, web docs, environment variables, or cached app metadata before attempting the MCP handoff tool.
-4. Omit `status` by default. This fetches pending/unprocessed handoffs, including items that are not ready for webhook delivery.
-5. Use `referenceContentEntityId`, `createdAtFrom`, `createdAtTo`, `day`, or `requestedDestinationText` only when the user or automation prompt provides those filters.
-6. Call `drain_handoff` only after the current agent has actually completed the handoff.
-7. Return a compact summary with fetched, processed, skipped, failed, and drained handoff IDs.
+3. For slash-command or automation use, call the configured Memex MCP `list_handoffs` tool first. When the user explicitly asks for all handoffs irrespective of status, omit both `status` and `readyOnly` to return every status and approval state. Do not search endpoint catalogs, web docs, environment variables, or cached app metadata before attempting the MCP handoff tool.
+4. For a normal poll, call `list_handoffs` with `status: "pending"` and omit `readyOnly`. This returns every unprocessed handoff, whether approved (`readyAt` is set) or not yet approved (`readyAt` is null), while excluding handoffs already marked processed.
+5. Process approved pending handoffs first. If any returned pending handoffs have `readyAt: null`, tell the user how many there are (with their IDs and titles) and ask: "These handoffs are not approved yet. Do you want me to pull and process them anyway?" Do not process or drain them unless the user confirms. In unattended polling, report them as skipped because approval is required; do not drain them.
+6. Use `referenceContentEntityId`, `createdAtFrom`, `createdAtTo`, `day`, or `requestedDestinationText` when the user or automation prompt provides those filters. To retrieve an old approved but unprocessed handoff, use `status: "pending"` with its date range. To retrieve a handoff already pulled before, use `status: "processed"` with its date range; this is an explicit historical lookup, not the normal poll.
+7. After the agent has successfully completed a selected handoff, it must call `drain_handoff` with the handoff ID and `processingTarget` (plus response metadata when supported). Confirm the returned handoff has `status: "processed"` and `processingType: "api_pull"`; if draining fails, report the failure so the handoff remains eligible for a later poll.
+8. Return a compact summary with fetched, processed, skipped (including unapproved), failed, and drained handoff IDs.
 
 ## Tool Discovery
 
