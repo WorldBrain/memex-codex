@@ -23,6 +23,7 @@ const SESSION_DIR = path.join(
 )
 const SESSION_PATH = path.join(SESSION_DIR, 'realtime-session.json')
 const MAX_BUFFERED_HANDOFFS = 100
+const REALTIME_STATUS_TOUCH_INTERVAL_MS = 20_000
 
 let initialized = false
 let sessionRecord = loadSessionRecord()
@@ -36,6 +37,7 @@ let connectionError = null
 let subscriptionRef = null
 let requestRef = 0
 let bufferedHandoffs = []
+let lastRealtimeStatusTouchAt = 0
 const seenHandoffVersions = new Set()
 
 function send(message) {
@@ -186,6 +188,37 @@ async function refreshSessionIfNeeded() {
     persistSessionRecord(sessionRecord)
 }
 
+async function touchRealtimeConnectionStatus(force = false) {
+    if (!sessionRecord) return
+    if (
+        !force &&
+        Date.now() - lastRealtimeStatusTouchAt <
+            REALTIME_STATUS_TOUCH_INTERVAL_MS
+    ) {
+        return
+    }
+
+    await refreshSessionIfNeeded()
+    const response = await fetch(
+        `${sessionRecord.supabaseUrl}/rest/v1/rpc/touch_handoff_destination_realtime_connection`,
+        {
+            method: 'POST',
+            headers: {
+                apikey: sessionRecord.supabaseAnonKey,
+                Authorization: `Bearer ${sessionRecord.session.accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                p_destination_id: sessionRecord.handoffDestinationId,
+            }),
+        },
+    )
+    if (!response.ok) {
+        throw new Error('Failed to report the live Realtime connection')
+    }
+    lastRealtimeStatusTouchAt = Date.now()
+}
+
 function websocketUrl(record) {
     const url = new URL('/realtime/v1/websocket', record.supabaseUrl)
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -283,6 +316,12 @@ function handleSocketMessage(event) {
             notify('info', {
                 type: 'memex_realtime_connected',
                 message: 'Memex Realtime handoff subscription connected.',
+            })
+            void touchRealtimeConnectionStatus(true).catch((error) => {
+                notify('warning', {
+                    type: 'memex_realtime_status_failed',
+                    message: error.message,
+                })
             })
         } else {
             connectionState = 'reconnecting'
@@ -405,6 +444,12 @@ async function connectRealtime() {
                             )
                         }
                         sendSocketMessage('phoenix', 'heartbeat', {}, nextRef())
+                        void touchRealtimeConnectionStatus().catch((error) => {
+                            notify('warning', {
+                                type: 'memex_realtime_status_failed',
+                                message: error.message,
+                            })
+                        })
                     })
                     .catch((error) => {
                         connectionError = error.message
