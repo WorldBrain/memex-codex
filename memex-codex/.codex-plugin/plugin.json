@@ -1,7 +1,7 @@
 {
     "name": "memex",
     "version": "2026.7.30",
-    "description": "Search and save content in your Memex library through the Memex MCP server and bundled Memex agent skills.",
+    "description": "Search and save Memex content, route handoffs, and receive live handoff notifications through bundled MCP servers and skills.",
     "author": {
         "name": "Memex",
         "email": "info@worldbrain.io",
@@ -10,16 +10,25 @@
     "homepage": "https://docs.memex.garden/for-agents/codex-plugin",
     "repository": "https://github.com/WorldBrain/memex-codex",
     "license": "MIT",
-    "keywords": ["memex", "mcp", "codex", "search", "knowledge-management"],
+    "keywords": [
+        "memex",
+        "mcp",
+        "codex",
+        "search",
+        "knowledge-management"
+    ],
     "skills": "./skills/",
     "mcpServers": "./.mcp.json",
     "interface": {
         "displayName": "Memex",
         "shortDescription": "Search and save content from your Memex library.",
-        "longDescription": "Connect to the Memex MCP server so agents can search saved content, save public URLs, and fetch handoffs with bundled Memex skills.",
+        "longDescription": "Connect to Memex so agents can search and save content, route handoffs, and pair a plugin-local Supabase Realtime subscriber for live handoff notifications.",
         "developerName": "Memex",
         "category": "Productivity",
-        "capabilities": ["Read", "Write"],
+        "capabilities": [
+            "Read",
+            "Write"
+        ],
         "websiteURL": "https://memex.garden",
         "privacyPolicyURL": "https://memex.garden/privacy/",
         "termsOfServiceURL": "https://memex.garden/terms/",

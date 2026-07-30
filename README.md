@@ -13,7 +13,8 @@ You can save, transcribe, summarize and search anything you come across. Website
 5. Select the `Memex Plugins` marketplace.
 6. Install `Memex`.
 7. Connect Memex when your client prompts for authentication.
-8. You're done. You can now use Memex from your agent.
+8. Run `/memex:enable-realtime-handoffs` once to pair live handoff notifications.
+9. You're done. You can now use Memex from your agent.
 
 ## Example prompts
 
@@ -33,6 +34,30 @@ That command uses the Memex MCP tool `list_handoffs`, backed by
 saved Codex project for each handoff, and creates one fresh task per handoff.
 The coordinator never performs or drains the handoff itself. Each created task
 owns only its handoff and drains it after the requested work is complete.
+
+## Realtime handoffs
+
+Run this once after connecting Memex:
+
+```text
+/memex:enable-realtime-handoffs
+```
+
+The command creates a two-minute, single-use pairing ticket through the hosted
+OAuth connection, then passes it to the plugin's bundled local MCP. That local
+MCP stores a refreshable Supabase session under `CODEX_HOME`, opens a Realtime
+WebSocket, reconnects automatically, and reads the durable handoff queue after
+reconnects so events cannot be lost.
+
+No companion application, tunnel, API key, or long-running terminal command is
+required. The current experimental implementation invokes `node` from the local
+MCP configuration; distribution builds will need a bundled runtime before this
+can be guaranteed on machines without Node.js.
+
+Codex does not yet expose a plugin host API for turning an unsolicited MCP
+notification into a new sidebar task in a saved project. Realtime delivery is
+live, while project resolution and task creation continue through
+`/memex:fetch-handoffs`.
 
 ## Authentication
 

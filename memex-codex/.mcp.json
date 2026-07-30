@@ -3,6 +3,12 @@
         "memex": {
             "type": "http",
             "url": "https://api.memex.garden/mcp"
+        },
+        "memex-realtime": {
+            "command": "node",
+            "args": ["./mcp/realtime-server.mjs"],
+            "cwd": ".",
+            "env_vars": ["CODEX_HOME"]
         }
     }
 }
