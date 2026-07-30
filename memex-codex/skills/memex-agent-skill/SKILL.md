@@ -15,7 +15,7 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 1. Use the Memex integration already configured in the current runtime.
 2. For handoff-only prompts or `/memex:fetch-handoffs`, call the configured MCP `list_handoffs` tool first. Do not fetch endpoint catalogs, search web docs, inspect environment credentials, or probe raw REST before attempting the MCP handoff tool.
-3. If authentication is missing or stale in interactive Codex, run `codex mcp login memex`; if it prints an authorize URL, open it with the local browser command available in the runtime, such as `open '<authorize-url>'` on macOS. Stop after opening OAuth and tell the user to complete sign-in, then start a new thread.
+3. If authentication is missing or stale in interactive Codex, run `codex mcp login memex`. Codex opens the authorization URL automatically. Only open the printed URL manually if Codex reports that the browser launch failed. Stop after starting OAuth and tell the user to complete sign-in, then start a new thread.
 4. In unattended automation or clients that cannot run local commands/open a browser, tell the user to refresh or regenerate credentials using the client OAuth flow. In Codex CLI, run `codex mcp login memex`; in clients with plugin auth UI, connect Memex when prompted. Use https://docs.memex.garden/general/authentication only as fallback docs.
 5. Parse responses using:
    https://docs.memex.garden/general/response-shape

@@ -53,8 +53,8 @@ because Memex is not logged in, start OAuth instead of continuing with fallback
 probing:
 
 1. Run `codex mcp login memex`.
-2. If Codex prints an authorize URL, open that URL with the local browser
-   command available in the runtime, such as `open '<authorize-url>'` on macOS.
+2. Codex opens the authorization URL automatically. Only open the printed URL
+   manually if Codex reports that the browser launch failed.
 3. Stop after opening the OAuth flow. Tell the user to complete sign-in, then
    start a new thread and rerun `/memex:fetch-handoffs`.
 4. Do not continue handoff processing in the same thread after OAuth completes;
