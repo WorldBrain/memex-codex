@@ -1,6 +1,6 @@
 {
     "name": "memex",
-    "version": "2026.7.19",
+    "version": "2026.7.30",
     "description": "Search and save content in your Memex library through the Memex MCP server and bundled Memex agent skills.",
     "author": {
         "name": "Memex",
@@ -10,13 +10,7 @@
     "homepage": "https://docs.memex.garden/for-agents/codex-plugin",
     "repository": "https://github.com/WorldBrain/memex-codex",
     "license": "MIT",
-    "keywords": [
-        "memex",
-        "mcp",
-        "codex",
-        "search",
-        "knowledge-management"
-    ],
+    "keywords": ["memex", "mcp", "codex", "search", "knowledge-management"],
     "skills": "./skills/",
     "mcpServers": "./.mcp.json",
     "interface": {
@@ -25,10 +19,7 @@
         "longDescription": "Connect to the Memex MCP server so agents can search saved content, save public URLs, and fetch handoffs with bundled Memex skills.",
         "developerName": "Memex",
         "category": "Productivity",
-        "capabilities": [
-            "Read",
-            "Write"
-        ],
+        "capabilities": ["Read", "Write"],
         "websiteURL": "https://memex.garden",
         "privacyPolicyURL": "https://memex.garden/privacy/",
         "termsOfServiceURL": "https://memex.garden/terms/",

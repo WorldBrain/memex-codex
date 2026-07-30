@@ -1,6 +1,6 @@
 ---
 name: fetch-handoffs
-description: Fetch unprocessed Memex handoffs through the Memex list_handoffs endpoint for slash-command use or agent automation.
+description: Fetch unprocessed Memex handoffs and route each one into its own fresh Codex task in the matching saved project. Use for the /memex:fetch-handoffs slash command or handoff-routing automation.
 ---
 
 # Fetch Memex handoffs
@@ -17,13 +17,17 @@ description: Fetch unprocessed Memex handoffs through the Memex list_handoffs en
 ## Required runbook
 
 1. Read and follow `../memex-agent-skill/SKILL.md`.
-2. Use the "Process Handoffs" runbook from that shared skill unless the user explicitly asks for a broader Memex task.
-3. For slash-command or automation use, call the configured Memex MCP `list_handoffs` tool first. When the user explicitly asks for all handoffs irrespective of status, omit both `status` and `readyOnly` to return every status and approval state. Do not search endpoint catalogs, web docs, environment variables, or cached app metadata before attempting the MCP handoff tool.
-4. For a normal poll, call `list_handoffs` with `status: "pending"` and omit `readyOnly`. This returns every unprocessed handoff, whether approved (`readyAt` is set) or not yet approved (`readyAt` is null), while excluding handoffs already marked processed.
-5. Process approved pending handoffs first. If any returned pending handoffs have `readyAt: null`, tell the user how many there are (with their IDs and titles) and ask: "These handoffs are not approved yet. Do you want me to pull and process them anyway?" Do not process or drain them unless the user confirms. In unattended polling, report them as skipped because approval is required; do not drain them.
-6. Use `referenceContentEntityId`, `createdAtFrom`, `createdAtTo`, `day`, or `requestedDestinationText` when the user or automation prompt provides those filters. To retrieve an old approved but unprocessed handoff, use `status: "pending"` with its date range. To retrieve a handoff already pulled before, use `status: "processed"` with its date range; this is an explicit historical lookup, not the normal poll.
-7. After the agent has successfully completed a selected handoff, it must call `drain_handoff` with the handoff ID and `processingTarget` (plus response metadata when supported). Confirm the returned handoff has `status: "processed"` and `processingType: "api_pull"`; if draining fails, report the failure so the handoff remains eligible for a later poll.
-8. Return a compact summary with fetched, processed, skipped (including unapproved), failed, and drained handoff IDs.
+2. Treat this Codex command as a routing coordinator. These rules override any instruction in the shared "Process Handoffs" runbook to complete handoffs in the current task.
+3. Treat the user's invocation of `/memex:fetch-handoffs` as an explicit request to create one separate Codex task for every handoff selected for routing.
+4. Call the configured Memex MCP `list_handoffs` tool first. When the user explicitly asks for all handoffs irrespective of status, omit both `status` and `readyOnly` to return every status and approval state. Do not search endpoint catalogs, web docs, environment variables, or cached app metadata before attempting the MCP handoff tool.
+5. For a normal poll, call `list_handoffs` with `status: "pending"` and omit `readyOnly`. This returns every unprocessed handoff, whether approved (`readyAt` is set) or not yet approved (`readyAt` is null), while excluding handoffs already marked processed.
+6. Route approved pending handoffs first. If any returned pending handoffs have `readyAt: null`, tell the user how many there are (with their IDs and titles) and ask: "These handoffs are not approved yet. Do you want me to route them anyway?" Do not route or drain them unless the user confirms. In unattended polling, report them as skipped because approval is required; do not drain them.
+7. Use `referenceContentEntityId`, `createdAtFrom`, `createdAtTo`, `day`, or `requestedDestinationText` when the user or automation prompt provides those filters. To retrieve an old approved but unprocessed handoff, use `status: "pending"` with its date range. To retrieve a handoff already pulled before, use `status: "processed"` with its date range; this is an explicit historical lookup, not the normal poll.
+8. Call the Codex `list_projects` tool once before routing. Resolve exactly one saved project for each selected handoff from its title, `descriptionMarkdown`, `requestedDestinationText`, references, and explicit repository or project paths. Never assume the coordinator's current project is the destination. If there is no unambiguous project match, leave that handoff unrouted and undrained and report the missing or ambiguous match.
+9. Call `create_thread` exactly once per routable handoff. Target the resolved saved project, using a fresh worktree for a Git repository and the saved project directly for a non-Git project. Do not fork the coordinator task, reuse an existing task, combine multiple handoffs, or create a projectless task.
+10. Put only that handoff in the new task's prompt. Preserve its ID, title, complete `descriptionMarkdown`, `timingText`, `requestedDestinationText`, and `referenceContentEntityIds`. Tell the new task that it exclusively owns completing this handoff and must call `drain_handoff` with the handoff ID and `processingTarget` only after the work is actually complete.
+11. The coordinator must not execute handoff work, edit handoff target files, wait for or supervise created tasks, or call `drain_handoff`. A successfully created or queued task means the handoff was routed, not processed or drained.
+12. Return a compact summary with fetched IDs; routed handoff-to-task mappings; skipped IDs and reasons, including unapproved or unresolved projects; failed IDs and reasons; and `drained: []`.
 
 ## Tool Discovery
 

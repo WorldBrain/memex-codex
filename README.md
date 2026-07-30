@@ -29,8 +29,10 @@ The plugin exposes a dedicated slash command for unprocessed handoffs:
 ```
 
 That command uses the Memex MCP tool `list_handoffs`, backed by
-`POST /list-handoffs`. It fetches pending handoffs by default and
-does not drain them unless the Codex agent actually completes the handoff.
+`POST /list-handoffs`. It fetches pending handoffs by default, resolves the
+saved Codex project for each handoff, and creates one fresh task per handoff.
+The coordinator never performs or drains the handoff itself. Each created task
+owns only its handoff and drains it after the requested work is complete.
 
 ## Authentication
 
