@@ -265,6 +265,11 @@ function toPluginHandoff(record) {
         destinationId: record.destination_id ?? null,
         readyAt: record.ready_at ?? null,
         status: record.status,
+        externalTaskProvider: record.external_task_provider ?? null,
+        externalTaskId: record.external_task_id ?? null,
+        externalTaskUrl: record.external_task_url ?? null,
+        externalTaskRegisteredAt:
+            record.external_task_registered_at ?? null,
         createdAt: record.created_at,
         updatedAt: record.updated_at,
     }
@@ -483,7 +488,7 @@ async function listPendingHandoffs(limit) {
     const url = new URL('/rest/v1/handoffs', sessionRecord.supabaseUrl)
     url.searchParams.set(
         'select',
-        'id,title,description_markdown,timing_text,requested_destination_text,reference_content_entity_ids,destination_id,ready_at,status,created_at,updated_at',
+        'id,title,description_markdown,timing_text,requested_destination_text,reference_content_entity_ids,destination_id,ready_at,status,external_task_provider,external_task_id,external_task_url,external_task_registered_at,created_at,updated_at',
     )
     url.searchParams.set(
         'destination_id',

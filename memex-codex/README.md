@@ -34,6 +34,9 @@ That command uses the Memex MCP tool `list_handoffs`, backed by
 saved Codex project for each handoff, and creates one fresh task per handoff.
 The coordinator never performs or drains the handoff itself. Each created task
 owns only its handoff and drains it after the requested work is complete.
+After Codex creates the task, the coordinator registers the returned thread ID
+with Memex. This gives the handoff a deterministic `codex://threads/<thread-id>`
+link without marking the handoff processed.
 
 ## Realtime handoffs
 
