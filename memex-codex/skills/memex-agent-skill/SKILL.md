@@ -13,13 +13,14 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 ## Start Every Memex Run
 
-1. Use the Memex integration already configured in the current runtime.
-2. For handoff-only prompts or `/memex:fetch-handoffs`, call the configured MCP `list_handoffs` tool first. Do not fetch endpoint catalogs, search web docs, inspect environment credentials, or probe raw REST before attempting the MCP handoff tool.
-3. If authentication is missing or stale in interactive Codex, run `codex mcp login memex`. Codex opens the authorization URL automatically. Only open the printed URL manually if Codex reports that the browser launch failed. Stop after starting OAuth and tell the user to complete sign-in, then start a new thread.
-4. In unattended automation or clients that cannot run local commands/open a browser, tell the user to refresh or regenerate credentials using the client OAuth flow. In Codex CLI, run `codex mcp login memex`; in clients with plugin auth UI, connect Memex when prompted. Use https://docs.memex.garden/general/authentication only as fallback docs.
-5. Parse responses using:
+1. Use the `memex` MCP server configured by this plugin. Do not substitute a separately configured legacy Memex connected app that does not expose `discover_actions`.
+2. Call `discover_actions` with the user's intended outcome before every Memex operation. Do not fetch endpoint catalogs, search web docs, inspect environment credentials, or probe raw REST first.
+3. Select the relevant returned action card, then call `execute_action` with its `id` as `actionId` and an `input` object matching its current `inputSummary`. Treat the action card as the cloud-side source of truth; do not require a named compatibility tool.
+4. If authentication is missing or stale in interactive Codex, run `codex mcp login memex`. Codex opens the authorization URL automatically. Only open the printed URL manually if Codex reports that the browser launch failed. Stop after starting OAuth and tell the user to complete sign-in, then start a new thread.
+5. In unattended automation or clients that cannot run local commands/open a browser, tell the user to refresh or regenerate credentials using the client OAuth flow. In Codex CLI, run `codex mcp login memex`; in clients with plugin auth UI, connect Memex when prompted. Use https://docs.memex.garden/general/authentication only as fallback docs.
+6. Parse responses using:
    https://docs.memex.garden/general/response-shape
-6. If a request fails because of insufficient credits, follow:
+7. If a request fails because of insufficient credits, follow:
    https://docs.memex.garden/general/buy-credits
 
 ## Choose The Runbook
@@ -44,38 +45,37 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 ## Search Saved Content
 
-1. Call `search_content` with the user's query.
-2. Default to `limit: 20`.
-3. Request the compact `llm` response shape by omitting `raw` or setting `raw: false`.
-4. Use `raw: true` only when the task needs richer machine-readable references.
-5. For MCP results, read `result.structuredContent`.
-6. Cite result URLs when a `url` is present.
+1. If the user supplies the URL of an already-saved item, select the discovered exact-URL lookup action and execute it first. Do not use semantic search to resolve an explicit URL.
+2. Otherwise select the discovered library-search action and execute it with the user's query.
+3. For normal searches, default to `limit: 20` and the compact response shape. Request richer output only when the task needs richer machine-readable references.
+4. For generic MCP execution results, read the action result from `result.structuredContent.output`.
+5. Cite result URLs when a `url` is present.
 
 ## Save Public Content
 
 1. Confirm the user provided a public URL or explicitly asked to save public content.
-2. Use the documented save/index endpoint or MCP tool from the latest endpoint catalog.
+2. Select the discovered save/index action and call `execute_action` using its returned action ID and current input summary.
 3. Include only user-requested tags, metadata, or notes.
 4. Report the saved item URL or returned Memex identifier.
 5. Do not claim the item is searchable until Memex reports successful indexing or processing.
 
 ## Create Or Inspect Sharing Links
 
-1. Use `list_sharing_links` when the user asks what is already shared.
-2. Use `create_sharing_link` when the user asks to share saved content.
+1. Discover and execute the sharing-link listing action when the user asks what is already shared.
+2. Discover and execute the sharing-link creation action when the user asks to share saved content.
 3. Set API access as `access: "view"` or `access: "collaborate"`.
 4. Return the public link and access level.
 
 ## Search Feeds
 
-1. Call `list_subscribed_feeds` to fetch feed IDs.
-2. To search selected feeds, call `search_content` with `feedIds`.
-3. To search all subscribed feeds only, call `search_content` with `feedScope: "all"`.
+1. Discover and execute the subscribed-feeds action to fetch feed IDs.
+2. To search selected feeds, discover and execute the library-search action with `feedIds`.
+3. To search all subscribed feeds only, execute the discovered library-search action with `feedScope: "all"`.
 4. To search the full library, omit both `feedIds` and `feedScope`.
 
 ## Process Handoffs
 
-1. Call `list_handoffs` when the user asks for pending handoffs, unprocessed handoffs, agent handoffs, routing cues, or handoffs in a time frame. When the user explicitly asks for all handoffs irrespective of status, omit both `status` and `readyOnly` to return every status and approval state.
+1. Discover and execute the handoff-listing action when the user asks for pending handoffs, unprocessed handoffs, agent handoffs, routing cues, or handoffs in a time frame. When the user explicitly asks for all handoffs irrespective of status, omit both `status` and `readyOnly` to return every status and approval state.
 2. For a normal poll, pass `status: "pending"` and omit `readyOnly`. This returns every unprocessed handoff, whether approved (`readyAt` is set) or not yet approved (`readyAt` is null), while excluding handoffs already marked processed.
 3. Process approved pending handoffs first. If any returned pending handoffs have `readyAt: null`, tell the user how many there are (with their IDs and titles) and ask: "These handoffs are not approved yet. Do you want me to pull and process them anyway?" Do not process or drain them unless the user confirms. In unattended polling, report them as skipped because approval is required; do not drain them.
 4. Use `referenceContentEntityId` when a referenced Memex content entity is known.
@@ -83,13 +83,13 @@ Do not use Memex for general web search or facts outside the user's saved librar
 6. Use `requestedDestinationText` to filter to a target app, agent, or person, such as Codex, Claude, OpenClaw, Hermes, Cursor, Devin, GitHub Copilot, Factory Droid, Jules, Replit Agent, Warp Oz, Obsidian, or a teammate.
 7. For each returned handoff, read `title`, `descriptionMarkdown`, `timingText`, `requestedDestinationText`, and `referenceContentEntityIds`.
 8. Process only handoffs this agent can actually complete in the current runtime. Leave unsupported or unsafe handoffs undrained and report why.
-9. After the agent has successfully completed a selected handoff, it must call `drain_handoff` with the handoff ID and `processingTarget` (plus response metadata when supported). Confirm the returned handoff has `status: "processed"` and `processingType: "api_pull"`; if draining fails, report the failure so the handoff remains eligible for a later poll.
-10. Do not call `drain_handoff` merely because a handoff was listed, inspected, summarized, queued elsewhere, or could not be completed.
+9. After the agent has successfully completed a selected handoff, discover and execute the handoff-draining action with the handoff ID and `processingTarget` (plus response metadata when supported). Confirm the returned handoff has `status: "processed"` and `processingType: "api_pull"`; if draining fails, report the failure so the handoff remains eligible for a later poll.
+10. Do not execute the handoff-draining action merely because a handoff was listed, inspected, summarized, queued elsewhere, or could not be completed.
 11. For automation runs, continue through all processable handoffs and finish with a compact machine-readable summary, including unapproved/skipped and drained handoff IDs.
 
 ## Search Or Manage Saved Views
 
-1. To search private saved views in MCP or Claude, call `search_content` with `viewIds`.
+1. To search private saved views in MCP or Claude, execute the discovered library-search action with `viewIds`.
 2. Use `raw: false` or omit `raw` for normal answer-writing.
 3. Use authenticated REST `POST /create-view` to create views.
 4. Use authenticated REST `POST /list-views` to list views.
