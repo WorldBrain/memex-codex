@@ -14,6 +14,7 @@ import {
     setTimeout,
 } from 'node:timers'
 import { URL } from 'node:url'
+import { runCodexHandoff } from './codex-app-server-client.mjs'
 
 const SERVER_VERSION = '0.1.0'
 const PROTOCOL_VERSION = '2025-06-18'
@@ -24,6 +25,7 @@ const SESSION_DIR = path.join(
 const SESSION_PATH = path.join(SESSION_DIR, 'realtime-session.json')
 const MAX_BUFFERED_HANDOFFS = 100
 const REALTIME_STATUS_TOUCH_INTERVAL_MS = 20_000
+const CODEX_PROCESSING_TARGET = 'codex_app_server'
 
 let initialized = false
 let sessionRecord = loadSessionRecord()
@@ -39,6 +41,7 @@ let requestRef = 0
 let bufferedHandoffs = []
 let lastRealtimeStatusTouchAt = 0
 const seenHandoffVersions = new Set()
+const routingHandoffIds = new Set()
 
 function send(message) {
     process.stdout.write(`${JSON.stringify(message)}\n`)
@@ -80,7 +83,10 @@ function loadSessionRecord() {
         ) {
             return null
         }
-        return parsed
+        return {
+            ...parsed,
+            projectRoutes: normalizeProjectRoutes(parsed.projectRoutes ?? []),
+        }
     } catch {
         return null
     }
@@ -148,7 +154,57 @@ async function exchangePairingTicket(ticket, exchangeUrl) {
         supabaseAnonKey: payload.supabaseAnonKey,
         handoffDestinationId: payload.handoffDestinationId,
         session,
+        projectRoutes: [],
     }
+}
+
+function normalizeProjectRoutes(routes) {
+    if (!Array.isArray(routes)) return []
+
+    const seen = new Set()
+    return routes.flatMap((route) => {
+        if (
+            !route ||
+            typeof route.name !== 'string' ||
+            typeof route.path !== 'string'
+        ) {
+            return []
+        }
+        const name = route.name.trim()
+        const projectPath = route.path.trim()
+        if (!name || !path.isAbsolute(projectPath)) return []
+
+        const key = `${name.toLocaleLowerCase()}:${projectPath}`
+        if (seen.has(key)) return []
+        seen.add(key)
+        return [{ name, path: projectPath }]
+    })
+}
+
+function normalizeDestinationText(value) {
+    return value
+        .toLocaleLowerCase()
+        .replace(/\b(project|repo|repository|folder)\b/g, ' ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ')
+}
+
+function resolveProjectRoute(handoff) {
+    const requestedDestination = handoff.requestedDestinationText
+    if (typeof requestedDestination !== 'string' || !sessionRecord) return null
+
+    const requested = normalizeDestinationText(requestedDestination)
+    if (!requested) return null
+
+    const matchingRoutes = sessionRecord.projectRoutes.filter((route) => {
+        const aliases = [route.name, path.basename(route.path)]
+        return aliases.some(
+            (alias) => normalizeDestinationText(alias) === requested,
+        )
+    })
+
+    return matchingRoutes.length === 1 ? matchingRoutes[0] : null
 }
 
 function sessionNeedsRefresh(record) {
@@ -275,6 +331,148 @@ function toPluginHandoff(record) {
     }
 }
 
+async function callSupabaseRpc(name, payload) {
+    if (!sessionRecord) {
+        throw new Error('Memex Realtime is not paired')
+    }
+    await refreshSessionIfNeeded()
+
+    const response = await fetch(
+        `${sessionRecord.supabaseUrl}/rest/v1/rpc/${name}`,
+        {
+            method: 'POST',
+            headers: {
+                apikey: sessionRecord.supabaseAnonKey,
+                Authorization: `Bearer ${sessionRecord.session.accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        },
+    )
+    const responsePayload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+        throw new Error(
+            typeof responsePayload.message === 'string'
+                ? responsePayload.message
+                : `Memex RPC ${name} failed`,
+        )
+    }
+    return responsePayload
+}
+
+function handoffPrompt(handoff) {
+    const timing = handoff.timingText ? `\nTiming: ${handoff.timingText}` : ''
+    const destination = handoff.requestedDestinationText
+        ? `\nRequested destination: ${handoff.requestedDestinationText}`
+        : ''
+    const references = handoff.referenceContentEntityIds.length
+        ? `\nMemex reference IDs: ${handoff.referenceContentEntityIds.join(', ')}`
+        : ''
+
+    return `You own this Memex handoff. Complete only this handoff in the current project, using your ordinary configured tools, skills, plugins, and approval policy. Do not create another task or broaden the work. The realtime bridge records completion automatically; do not drain the handoff yourself.
+
+Memex handoff ID: ${handoff.id}
+Title: ${handoff.title}${destination}${timing}${references}
+
+Description:
+${handoff.descriptionMarkdown}`
+}
+
+async function routeHandoff(handoff, projectRoute) {
+    let threadId = null
+    let processingStarted = false
+    try {
+        await callSupabaseRpc('start_handoff_processing', {
+            p_handoff_id: handoff.id,
+            p_processing_type: 'api_pull',
+            p_processing_target: CODEX_PROCESSING_TARGET,
+        })
+        processingStarted = true
+        const result = await runCodexHandoff({
+            projectPath: projectRoute.path,
+            prompt: handoffPrompt(handoff),
+            onThreadCreated: async (createdThreadId) => {
+                threadId = createdThreadId
+                await callSupabaseRpc('register_codex_handoff_task', {
+                    p_handoff_id: handoff.id,
+                    p_destination_id: sessionRecord.handoffDestinationId,
+                    p_thread_id: createdThreadId,
+                })
+                notify('info', {
+                    type: 'memex_handoff_task_started',
+                    message: `Codex task started for Memex handoff: ${handoff.title}`,
+                    handoffId: handoff.id,
+                    threadId: createdThreadId,
+                    projectPath: projectRoute.path,
+                })
+            },
+        })
+
+        await callSupabaseRpc('drain_handoff', {
+            p_handoff_id: handoff.id,
+            p_processing_target: CODEX_PROCESSING_TARGET,
+            p_response_metadata: {
+                codexThreadId: result.threadId,
+                projectPath: projectRoute.path,
+            },
+        })
+        notify('info', {
+            type: 'memex_handoff_completed',
+            message: `Memex handoff completed: ${handoff.title}`,
+            handoffId: handoff.id,
+            threadId: result.threadId,
+        })
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Task failed'
+        if (processingStarted) {
+            await callSupabaseRpc('fail_handoff_processing', {
+                p_handoff_id: handoff.id,
+                p_error_message: message,
+                p_response_metadata: {
+                    codexThreadId: threadId,
+                    projectPath: projectRoute.path,
+                },
+            }).catch(() => {})
+        }
+        notify('error', {
+            type: 'memex_handoff_task_failed',
+            message: `Memex handoff failed: ${handoff.title}. ${message}`,
+            handoffId: handoff.id,
+            threadId,
+        })
+    } finally {
+        routingHandoffIds.delete(handoff.id)
+    }
+}
+
+function queueHandoffRouting(handoff) {
+    if (handoff.externalTaskId || routingHandoffIds.has(handoff.id)) return false
+
+    const projectRoute = resolveProjectRoute(handoff)
+    if (!projectRoute) {
+        notify('warning', {
+            type: 'memex_handoff_route_unresolved',
+            message: `No unique local Codex project route matches: ${handoff.requestedDestinationText ?? handoff.title}`,
+            handoffId: handoff.id,
+        })
+        return false
+    }
+
+    routingHandoffIds.add(handoff.id)
+    void routeHandoff(handoff, projectRoute)
+    return true
+}
+
+async function queuePendingHandoffRouting() {
+    const pending = await listPendingHandoffs(MAX_BUFFERED_HANDOFFS)
+    return {
+        pending,
+        queuedHandoffIds: pending
+            .filter((handoff) => queueHandoffRouting(handoff))
+            .map((handoff) => handoff.id),
+    }
+}
+
 function recordRealtimeHandoff(record) {
     if (
         !record ||
@@ -303,6 +501,7 @@ function recordRealtimeHandoff(record) {
         message: `Memex handoff ready: ${handoff.title}`,
         handoff,
     })
+    queueHandoffRouting(handoff)
 }
 
 function handleSocketMessage(event) {
@@ -325,6 +524,12 @@ function handleSocketMessage(event) {
             void touchRealtimeConnectionStatus(true).catch((error) => {
                 notify('warning', {
                     type: 'memex_realtime_status_failed',
+                    message: error.message,
+                })
+            })
+            void queuePendingHandoffRouting().catch((error) => {
+                notify('warning', {
+                    type: 'memex_handoff_catch_up_failed',
                     message: error.message,
                 })
             })
@@ -517,6 +722,8 @@ function getStatus() {
         paired: Boolean(sessionRecord),
         connectionState,
         handoffDestinationId: sessionRecord?.handoffDestinationId ?? null,
+        projectRoutes: sessionRecord?.projectRoutes ?? [],
+        activeHandoffCount: routingHandoffIds.size,
         bufferedHandoffCount: bufferedHandoffs.length,
         lastError: connectionError,
     }
@@ -532,8 +739,45 @@ const tools = [
             properties: {
                 ticket: { type: 'string', minLength: 20 },
                 exchangeUrl: { type: 'string', format: 'uri' },
+                projectRoutes: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            name: { type: 'string', minLength: 1 },
+                            path: { type: 'string', minLength: 1 },
+                        },
+                        required: ['name', 'path'],
+                        additionalProperties: false,
+                    },
+                },
             },
             required: ['ticket', 'exchangeUrl'],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: 'configure_realtime_handoff_routes',
+        description:
+            'Replace the local Codex project routes used to automatically turn approved Memex handoffs into Codex tasks.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                projectRoutes: {
+                    type: 'array',
+                    minItems: 1,
+                    items: {
+                        type: 'object',
+                        properties: {
+                            name: { type: 'string', minLength: 1 },
+                            path: { type: 'string', minLength: 1 },
+                        },
+                        required: ['name', 'path'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            required: ['projectRoutes'],
             additionalProperties: false,
         },
     },
@@ -583,12 +827,31 @@ async function callTool(name, args) {
             args.ticket,
             args.exchangeUrl,
         )
+        sessionRecord.projectRoutes = normalizeProjectRoutes(
+            args.projectRoutes ?? [],
+        )
         persistSessionRecord(sessionRecord)
         await connectRealtime()
-        const pending = await listPendingHandoffs(100)
+        const { pending, queuedHandoffIds } = await queuePendingHandoffRouting()
         return toolResult(
-            { ...getStatus(), pendingHandoffs: pending },
-            `Memex Realtime paired. ${pending.length} approved pending handoff(s) are ready in the durable queue.`,
+            { ...getStatus(), pendingHandoffs: pending, queuedHandoffIds },
+            `Memex Realtime paired. ${queuedHandoffIds.length} approved pending handoff(s) were routed automatically.`,
+        )
+    }
+    if (name === 'configure_realtime_handoff_routes') {
+        if (!sessionRecord) {
+            throw new Error('Memex Realtime is not paired')
+        }
+        const projectRoutes = normalizeProjectRoutes(args.projectRoutes)
+        if (!projectRoutes.length) {
+            throw new Error('At least one absolute local project route is required')
+        }
+        sessionRecord = { ...sessionRecord, projectRoutes }
+        persistSessionRecord(sessionRecord)
+        const { pending, queuedHandoffIds } = await queuePendingHandoffRouting()
+        return toolResult(
+            { ...getStatus(), pendingHandoffs: pending, queuedHandoffIds },
+            `Configured ${projectRoutes.length} local Codex project route(s). ${queuedHandoffIds.length} pending handoff(s) were routed automatically.`,
         )
     }
     if (name === 'realtime_handoff_status') {

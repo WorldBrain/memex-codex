@@ -1,6 +1,6 @@
 ---
 name: memex-agent-skill
-description: Search and save Memex library content, and fetch, process, or drain pending Memex handoffs for manual slash-command use or agent automation.
+description: Search and save Memex library content, follow RSS and YouTube sources, and fetch, process, or drain pending Memex handoffs for manual slash-command use or agent automation.
 ---
 
 # Memex agent skill
@@ -29,6 +29,7 @@ Do not use Memex for general web search or facts outside the user's saved librar
 - Save a public URL into Memex so it becomes searchable later.
 - Create and list public sharing links for saved Memex content when the user asks to share or inspect shared items.
 - List the user's subscribed feeds and search within one feed, selected feeds, or all subscribed feeds.
+- Follow an RSS feed, YouTube channel, or YouTube playlist, optionally importing its complete history.
 - Fetch pending or time-filtered handoffs when the user asks what needs to be processed, handed off, shared, routed, or handled by an agent.
 - Read or create the user's auto-tagging rules when they explicitly ask to inspect or configure automatic tagging.
 - Work with Memex-native content such as web pages, annotations, tweets, YouTube videos, images, and related saved entities.
@@ -72,6 +73,14 @@ Do not use Memex for general web search or facts outside the user's saved librar
 2. To search selected feeds, discover and execute the library-search action with `feedIds`.
 3. To search all subscribed feeds only, execute the discovered library-search action with `feedScope: "all"`.
 4. To search the full library, omit both `feedIds` and `feedScope`.
+
+## Follow Sources
+
+1. Discover the follow-source action when the user provides an RSS feed, YouTube channel, or YouTube playlist URL and asks to follow it.
+2. Execute it with `sourceUrl`. With no history option, it follows using Memex's normal initial sync.
+3. To import the whole available archive, set `fetchHistory: true`. To import a bounded archive, provide the action's documented `importScope` instead.
+4. For YouTube, optionally provide `youtubeContentScope` as `all`, `videos`, or `shorts`.
+5. Report the returned feed and any queued entry count or usage charge. Do not claim an archive has finished indexing until the action reports it processed.
 
 ## Process Handoffs
 

@@ -13,7 +13,7 @@ You can save, transcribe, summarize and search anything you come across. Website
 5. Select the `Memex Plugins` marketplace.
 6. Install `Memex`.
 7. Connect Memex when your client prompts for authentication.
-8. Run `/memex:enable-realtime-handoffs` once to pair live handoff notifications.
+8. Return to Memex, select Codex in Integrations, complete pairing, then continue to set up a 10-minute handoff poller.
 9. You're done. You can now use Memex from your agent.
 
 ## Example prompts
@@ -38,29 +38,14 @@ After Codex creates the task, the coordinator registers the returned thread ID
 with Memex. This gives the handoff a deterministic `codex://threads/<thread-id>`
 link without marking the handoff processed.
 
-## Realtime handoffs
+## Scheduled handoffs
 
-Run this once after connecting Memex:
-
-```text
-/memex:enable-realtime-handoffs
-```
-
-The command creates a two-minute, single-use pairing ticket through the hosted
-OAuth connection, then passes it to the plugin's bundled local MCP. That local
-MCP stores a refreshable Supabase session under `CODEX_HOME`, opens a Realtime
-WebSocket, reconnects automatically, and reads the durable handoff queue after
-reconnects so events cannot be lost.
-
-No companion application, tunnel, API key, or long-running terminal command is
-required. The current experimental implementation invokes `node` from the local
-MCP configuration; distribution builds will need a bundled runtime before this
-can be guaranteed on machines without Node.js.
-
-Codex does not yet expose a plugin host API for turning an unsolicited MCP
-notification into a new sidebar task in a saved project. Realtime delivery is
-live, while project resolution and task creation continue through
-`/memex:fetch-handoffs`.
+In Memex, select Codex in Integrations and complete the OAuth pairing. Once
+Memex shows that Codex is connected, **Continue** opens the **Set up automation**
+step. **Set up now** opens Codex with a prompt that creates a scheduled job to
+run `/memex:fetch-handoffs` every 10 minutes. The durable queue remains the
+source of truth; the automation routes approved pending handoffs into their
+matching saved projects without requiring a local Realtime connection.
 
 ## Authentication
 
