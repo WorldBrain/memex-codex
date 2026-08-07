@@ -1,6 +1,6 @@
 {
     "name": "memex",
-    "version": "2026.8.4",
+    "version": "2026.8.7",
     "description": "Search and save Memex content, route handoffs, and receive live handoff notifications through bundled MCP servers and skills.",
     "author": {
         "name": "Memex",
