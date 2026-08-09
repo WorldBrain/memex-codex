@@ -30,10 +30,15 @@ The plugin exposes a dedicated slash command for unprocessed handoffs:
 ```
 
 That command discovers the cloud-side handoff-listing action and invokes it
-through `execute_action`. It fetches pending handoffs by default, resolves the
-saved Codex project for each handoff, and creates one fresh task per handoff.
-The coordinator never performs or drains the handoff itself. Each created task
-owns only its handoff and drains it after the requested work is complete.
+through `execute_action`. It fetches pending handoffs by default, routes only
+handoffs whose canonical `executionAgentId` is `codex`, resolves the saved Codex
+project for each of those handoffs, and creates one fresh task per handoff.
+Handoffs assigned to other execution agents are skipped and left undrained.
+When present, `targetAppId` is included in the Codex task as downstream app
+context. A handoff with `taskMode: "planning"` becomes an explicit planning-only
+task; `taskMode: "implementation"` becomes a normal implementation task.
+The routing command never performs or drains the handoff itself. Each created
+task owns only its handoff and drains it after the assigned work is complete.
 After Codex creates the task, the coordinator registers the returned thread ID
 with Memex. This gives the handoff a deterministic `codex://threads/<thread-id>`
 link without marking the handoff processed.
@@ -44,8 +49,8 @@ In Memex, select Codex in Integrations and complete the OAuth pairing. Once
 Memex shows that Codex is connected, **Continue** opens the **Set up automation**
 step. **Set up now** opens Codex with a prompt that creates a scheduled job to
 run `/memex:fetch-handoffs` every 10 minutes. The durable queue remains the
-source of truth; the automation routes approved pending handoffs into their
-matching saved projects without requiring a local Realtime connection.
+source of truth; the automation routes approved pending Codex handoffs into
+their matching saved projects without requiring a local Realtime connection.
 
 ## Authentication
 
