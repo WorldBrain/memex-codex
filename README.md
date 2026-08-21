@@ -13,7 +13,7 @@ You can save, transcribe, summarize and search anything you come across. Website
 5. Select the `Memex Plugins` marketplace.
 6. Install `Memex`.
 7. Connect Memex when your client prompts for authentication.
-8. Return to Memex, select Codex in Integrations, complete pairing, then continue to set up a 10-minute handoff poller.
+8. Return to Memex, select Codex in Integrations, complete pairing, then continue to enable realtime handoffs.
 9. You're done. You can now use Memex from your agent.
 
 ## Example prompts
@@ -43,14 +43,17 @@ After Codex creates the task, the coordinator registers the returned thread ID
 with Memex. This gives the handoff a deterministic `codex://threads/<thread-id>`
 link without marking the handoff processed.
 
-## Scheduled handoffs
+## Realtime handoffs
 
 In Memex, select Codex in Integrations and complete the OAuth pairing. Once
-Memex shows that Codex is connected, **Continue** opens the **Set up automation**
-step. **Set up now** opens Codex with a prompt that creates a scheduled job to
-run `/memex:fetch-handoffs` every 10 minutes. The durable queue remains the
-source of truth; the automation routes approved pending Codex handoffs into
-their matching saved projects without requiring a local Realtime connection.
+Memex shows that Codex is connected, **Continue** opens the **Enable realtime
+handoffs** step. **Enable now** opens Codex with a prompt that runs
+`/memex:enable-realtime-handoffs`, pairs the plugin-local MCP, and maps saved
+local projects. New approved handoffs are routed immediately while Codex keeps
+that MCP process running. The durable queue remains the source of truth: a
+handoff stays pending when realtime delivery is unavailable, a project route is
+ambiguous, or local task startup fails. `/memex:fetch-handoffs` remains the
+manual fallback.
 
 ## Authentication
 

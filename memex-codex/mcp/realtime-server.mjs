@@ -42,6 +42,7 @@ let bufferedHandoffs = []
 let lastRealtimeStatusTouchAt = 0
 const seenHandoffVersions = new Set()
 const routingHandoffIds = new Set()
+const deferredHandoffIds = new Set()
 
 function send(message) {
     process.stdout.write(`${JSON.stringify(message)}\n`)
@@ -424,19 +425,31 @@ async function routeHandoff(handoff, projectRoute) {
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Task failed'
+        let releaseError = null
         if (processingStarted) {
-            await callSupabaseRpc('fail_handoff_processing', {
-                p_handoff_id: handoff.id,
-                p_error_message: message,
-                p_response_metadata: {
-                    codexThreadId: threadId,
-                    projectPath: projectRoute.path,
-                },
-            }).catch(() => {})
+            deferredHandoffIds.add(handoff.id)
+            try {
+                await callSupabaseRpc('release_handoff_processing', {
+                    p_handoff_id: handoff.id,
+                    p_processing_target: CODEX_PROCESSING_TARGET,
+                    p_error_message: message,
+                    p_response_metadata: {
+                        codexThreadId: threadId,
+                        projectPath: projectRoute.path,
+                    },
+                })
+            } catch (releaseFailure) {
+                releaseError =
+                    releaseFailure instanceof Error
+                        ? releaseFailure.message
+                        : 'Could not return the handoff to pending'
+            }
         }
         notify('error', {
             type: 'memex_handoff_task_failed',
-            message: `Memex handoff failed: ${handoff.title}. ${message}`,
+            message: releaseError
+                ? `Memex handoff delivery failed and could not be returned to pending: ${handoff.title}. ${releaseError}`
+                : `Memex handoff delivery failed and remains pending: ${handoff.title}. ${message}`,
             handoffId: handoff.id,
             threadId,
         })
@@ -446,7 +459,13 @@ async function routeHandoff(handoff, projectRoute) {
 }
 
 function queueHandoffRouting(handoff) {
-    if (handoff.externalTaskId || routingHandoffIds.has(handoff.id)) return false
+    if (
+        handoff.externalTaskId ||
+        routingHandoffIds.has(handoff.id) ||
+        deferredHandoffIds.has(handoff.id)
+    ) {
+        return false
+    }
 
     const projectRoute = resolveProjectRoute(handoff)
     if (!projectRoute) {
@@ -831,6 +850,10 @@ async function callTool(name, args) {
             args.projectRoutes ?? [],
         )
         persistSessionRecord(sessionRecord)
+        deferredHandoffIds.clear()
+        await callSupabaseRpc('select_local_realtime_handoff_delivery', {
+            p_destination_id: sessionRecord.handoffDestinationId,
+        })
         await connectRealtime()
         const { pending, queuedHandoffIds } = await queuePendingHandoffRouting()
         return toolResult(
@@ -848,6 +871,10 @@ async function callTool(name, args) {
         }
         sessionRecord = { ...sessionRecord, projectRoutes }
         persistSessionRecord(sessionRecord)
+        deferredHandoffIds.clear()
+        await callSupabaseRpc('select_local_realtime_handoff_delivery', {
+            p_destination_id: sessionRecord.handoffDestinationId,
+        })
         const { pending, queuedHandoffIds } = await queuePendingHandoffRouting()
         return toolResult(
             { ...getStatus(), pendingHandoffs: pending, queuedHandoffIds },
