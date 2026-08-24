@@ -2,6 +2,11 @@ import { spawn } from 'node:child_process'
 import readline from 'node:readline'
 
 const THREAD_CREATION_TIMEOUT_MS = 30_000
+const HANDOFF_APP_SERVER_ARGS = [
+    'app-server',
+    '-c',
+    'mcp_servers.memex.enabled=false',
+]
 
 function handoffExecutionError(message, error) {
     const detail = error instanceof Error ? error.message : null
@@ -18,7 +23,9 @@ export function runCodexHandoff({
     onThreadCreated,
 }) {
     return new Promise((resolve, reject) => {
-        const child = spawn('codex', ['app-server'], {
+        // Receiving a handoff must not implicitly connect the new task to Memex.
+        // The plugin remains installed and can be enabled explicitly when needed.
+        const child = spawn('codex', HANDOFF_APP_SERVER_ARGS, {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe'],
         })
