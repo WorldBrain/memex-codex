@@ -59,7 +59,7 @@ manual fallback.
 
 The default hosted Memex MCP endpoint is:
 
-- `https://api.memex.garden/mcp`
+- `https://memex.garden/api/mcp`
 
 Authentication is OAuth-first. When the plugin calls Memex for the first time,
 your client should start the Memex sign-in flow. OAuth clients should register
@@ -94,7 +94,7 @@ export MEMEX_USER_ID="YOUR_MEMEX_USER_ID"
 Endpoint override:
 
 ```bash
-export MEMEX_MCP_URL="https://api.memex.garden/mcp"
+export MEMEX_MCP_URL="https://memex.garden/api/mcp"
 ```
 
 Local backend example:
@@ -110,14 +110,14 @@ Auth precedence:
 - `MEMEX_BEARER_TOKEN` is the first fallback when present
 - otherwise the MCP server may use `MEMEX_API_KEY`
 - `MEMEX_USER_ID` is optional
-- `MEMEX_MCP_URL` defaults to `https://api.memex.garden/mcp`
+- `MEMEX_MCP_URL` defaults to `https://memex.garden/api/mcp`
 
 Auth docs:
 
 - [Authentication](https://docs.memex.garden/general/authentication)
 
 If a client asks for the raw MCP server URL, use
-`https://api.memex.garden/mcp` for production or `http://localhost:8787/mcp`
+`https://memex.garden/api/mcp` for production or `http://localhost:8787/mcp`
 for local development.
 
 ## Docs

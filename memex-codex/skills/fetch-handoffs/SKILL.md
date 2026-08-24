@@ -8,7 +8,7 @@ description: Fetch unprocessed Memex handoffs addressed to Codex and route each 
 ## Endpoint
 
 - Slash command: `/memex:fetch-handoffs`
-- MCP server URL: `https://api.memex.garden/mcp`
+- MCP server URL: `https://memex.garden/api/mcp`
 - MCP discovery tool: `discover_actions`
 - MCP execution tool: `execute_action`
 - REST endpoint: `POST /list-handoffs`

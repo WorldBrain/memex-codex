@@ -2,7 +2,7 @@
     "mcpServers": {
         "memex": {
             "type": "http",
-            "url": "https://api.memex.garden/mcp"
+            "url": "https://memex.garden/api/mcp"
         },
         "memex-realtime": {
             "command": "node",
