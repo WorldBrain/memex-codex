@@ -1,6 +1,6 @@
 ---
 name: memex-agent-skill
-description: Search and save Memex library content, follow RSS and YouTube sources, and fetch, process, or drain pending Memex handoffs for manual slash-command use or agent automation.
+description: Search and save Memex library content, follow RSS and YouTube sources, and fetch, process, or drain pending Memex handoffs for manual skill use or agent automation.
 ---
 
 # Memex agent skill
@@ -16,12 +16,10 @@ Do not use Memex for general web search or facts outside the user's saved librar
 1. Use the `memex` MCP server configured by this plugin. Do not substitute a separately configured legacy Memex connected app that does not expose `discover_actions`.
 2. Call `discover_actions` with the user's intended outcome before every Memex operation. Do not fetch endpoint catalogs, search web docs, inspect environment credentials, or probe raw REST first.
 3. Select the relevant returned action card, then call `execute_action` with its `id` as `actionId` and an `input` object matching its current `inputSummary`. Treat the action card as the cloud-side source of truth; do not require a named compatibility tool.
-4. If authentication is missing or stale in interactive Codex, run `codex mcp login memex`. Codex opens the authorization URL automatically. Only open the printed URL manually if Codex reports that the browser launch failed. Stop after starting OAuth and tell the user to complete sign-in, then start a new thread.
-5. In unattended automation or clients that cannot run local commands/open a browser, tell the user to refresh or regenerate credentials using the client OAuth flow. In Codex CLI, run `codex mcp login memex`; in clients with plugin auth UI, connect Memex when prompted. Use https://docs.memex.garden/general/authentication only as fallback docs.
-6. Parse responses using:
-   https://docs.memex.garden/general/response-shape
-7. If a request fails because of insufficient credits, follow:
-   https://docs.memex.garden/general/buy-credits
+4. If authentication is missing or stale, use the current host's MCP or plugin authentication flow. Complete sign-in and start a new conversation or agent session before retrying so the tool catalogue refreshes.
+5. In unattended automation or clients that cannot open an authentication flow, stop and tell the user to connect Memex interactively before retrying. Use https://docs.memex.garden/general/authentication only as fallback documentation.
+6. Parse responses using https://docs.memex.garden/general/response-shape.
+7. If a request fails because of insufficient credits, follow https://docs.memex.garden/general/buy-credits.
 
 ## Choose The Runbook
 
@@ -36,11 +34,10 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 ## Manual And Automation Use
 
-- Manual invocation: this skill must work when selected from an agent's skill or slash-command UI, including Codex and Claude plugin skill shortcuts.
-- Automation invocation: this skill must also work when an unattended Codex or Claude automation prompt asks to process Memex handoffs.
+- Manual invocation: this skill must work when selected from an agent host's skill or slash-command UI.
+- Automation invocation: this skill must also work when an unattended agent prompt asks to process Memex handoffs.
 - If the prompt is only about handoffs, skip unrelated runbooks and start at "Process Handoffs".
-- Prefer OAuth-based Memex connection. Do not ask first-time users for API keys
-  unless OAuth is unavailable in the current client.
+- Prefer OAuth-based Memex connection. Do not ask first-time users for API keys unless OAuth is unavailable in the current client.
 - In automation mode, avoid asking follow-up questions unless authentication is missing or processing would require an irreversible external action not described in the handoff.
 - Return a compact summary with processed, skipped, failed, and drained handoff IDs.
 
@@ -89,16 +86,16 @@ Do not use Memex for general web search or facts outside the user's saved librar
 3. Process approved pending handoffs first. If any returned pending handoffs have `readyAt: null`, tell the user how many there are (with their IDs and titles) and ask: "These handoffs are not approved yet. Do you want me to pull and process them anyway?" Do not process or drain them unless the user confirms. In unattended polling, report them as skipped because approval is required; do not drain them.
 4. Use `referenceContentEntityId` when a referenced Memex content entity is known.
 5. Use `createdAtFrom` and `createdAtTo` for an arbitrary ISO timestamp range, or `day` for a single `YYYY-MM-DD` day. To retrieve an old approved but unprocessed handoff, use `status: "pending"` with its date range. To retrieve a handoff already pulled before, use `status: "processed"` with its date range; this is an explicit historical lookup, not the normal poll.
-6. Use `requestedDestinationText` to filter to a target app, agent, or person, such as Codex, Claude, OpenClaw, Hermes, Cursor, Devin, GitHub Copilot, Factory Droid, Jules, Replit Agent, Warp Oz, Obsidian, or a teammate.
+6. Use `requestedDestinationText` to filter to a target app, agent, or person.
 7. For each returned handoff, read `title`, `descriptionMarkdown`, `timingText`, `requestedDestinationText`, and `referenceContentEntityIds`.
 8. Process only handoffs this agent can actually complete in the current runtime. Leave unsupported or unsafe handoffs undrained and report why.
-9. After the agent has successfully completed a selected handoff, discover and execute the handoff-draining action with the handoff ID and `processingTarget` (plus response metadata when supported). Confirm the returned handoff has `status: "processed"` and `processingType: "api_pull"`; if draining fails, report the failure so the handoff remains eligible for a later poll.
+9. After the agent has successfully completed a selected handoff, discover and execute the handoff-draining action with the handoff ID and `processingTarget` plus response metadata when supported. Confirm the returned handoff has `status: "processed"` and `processingType: "api_pull"`; if draining fails, report the failure so the handoff remains eligible for a later poll.
 10. Do not execute the handoff-draining action merely because a handoff was listed, inspected, summarized, queued elsewhere, or could not be completed.
 11. For automation runs, continue through all processable handoffs and finish with a compact machine-readable summary, including unapproved/skipped and drained handoff IDs.
 
 ## Search Or Manage Saved Views
 
-1. To search private saved views in MCP or Claude, execute the discovered library-search action with `viewIds`.
+1. To search private saved views through MCP, execute the discovered library-search action with `viewIds`.
 2. Use `raw: false` or omit `raw` for normal answer-writing.
 3. Use authenticated REST `POST /create-view` to create views.
 4. Use authenticated REST `POST /list-views` to list views.
@@ -108,10 +105,10 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 1. Authentication error: tell the user to refresh credentials with https://docs.memex.garden/general/authentication.
 2. Insufficient credits:
-   - Fetch available plans.
-   - Ask the human which plan to use.
-   - For one-time plans, use the runtime payment harness to issue a Stripe Shared Payment Token, then call authenticated `POST /checkout` with the user's Memex bearer token and token.
-   - For subscription plans, send the user to https://memex.garden/pricing.
+    - Fetch available plans.
+    - Ask the human which plan to use.
+    - For one-time plans, use the runtime payment harness to issue a Stripe Shared Payment Token, then call authenticated `POST /checkout` with the user's Memex bearer token and token.
+    - For subscription plans, send the user to https://memex.garden/pricing.
 3. Malformed request or unknown parameter: re-read https://docs.memex.garden/general/available-endpoints and retry with documented field names.
 
 ## Troubleshooting
@@ -119,3 +116,12 @@ Do not use Memex for general web search or facts outside the user's saved librar
 - Not authenticated: https://docs.memex.garden/general/authentication
 - Out of credits: https://docs.memex.garden/general/buy-credits
 - Malformed request or unknown parameter: re-read https://docs.memex.garden/general/available-endpoints and retry with the documented field names.
+
+## ChatGPT and Codex authentication
+
+If authentication is missing or stale in Codex CLI, run
+`codex mcp login memex`. Codex opens the authorization URL automatically. Only
+open the printed URL manually if Codex reports that browser launch failed.
+Complete sign-in, then start a new task before retrying so its tool catalogue
+includes the authenticated Memex actions. In ChatGPT, connect Memex through the
+plugin authentication prompt and start a new chat before retrying.

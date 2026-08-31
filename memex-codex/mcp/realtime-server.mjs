@@ -182,32 +182,6 @@ function normalizeProjectRoutes(routes) {
     })
 }
 
-function normalizeDestinationText(value) {
-    return value
-        .toLocaleLowerCase()
-        .replace(/\b(project|repo|repository|folder)\b/g, ' ')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .trim()
-        .replace(/\s+/g, ' ')
-}
-
-function resolveProjectRoute(handoff) {
-    const requestedDestination = handoff.requestedDestinationText
-    if (typeof requestedDestination !== 'string' || !sessionRecord) return null
-
-    const requested = normalizeDestinationText(requestedDestination)
-    if (!requested) return null
-
-    const matchingRoutes = sessionRecord.projectRoutes.filter((route) => {
-        const aliases = [route.name, path.basename(route.path)]
-        return aliases.some(
-            (alias) => normalizeDestinationText(alias) === requested,
-        )
-    })
-
-    return matchingRoutes.length === 1 ? matchingRoutes[0] : null
-}
-
 function sessionNeedsRefresh(record) {
     if (typeof record.session.expiresAt !== 'number') return false
     return record.session.expiresAt * 1000 <= Date.now() + 60_000
@@ -325,8 +299,7 @@ function toPluginHandoff(record) {
         externalTaskProvider: record.external_task_provider ?? null,
         externalTaskId: record.external_task_id ?? null,
         externalTaskUrl: record.external_task_url ?? null,
-        externalTaskRegisteredAt:
-            record.external_task_registered_at ?? null,
+        externalTaskRegisteredAt: record.external_task_registered_at ?? null,
         createdAt: record.created_at,
         updatedAt: record.updated_at,
     }
@@ -361,7 +334,7 @@ async function callSupabaseRpc(name, payload) {
     return responsePayload
 }
 
-function handoffPrompt(handoff) {
+function handoffPrompt(handoff, projectRoutes) {
     const timing = handoff.timingText ? `\nTiming: ${handoff.timingText}` : ''
     const destination = handoff.requestedDestinationText
         ? `\nRequested destination: ${handoff.requestedDestinationText}`
@@ -369,8 +342,21 @@ function handoffPrompt(handoff) {
     const references = handoff.referenceContentEntityIds.length
         ? `\nMemex reference IDs: ${handoff.referenceContentEntityIds.join(', ')}`
         : ''
+    const projectHints = projectRoutes.length
+        ? `\nOptional saved-project hints (confirm them with list_projects; they may be stale):\n${projectRoutes
+              .map((route) => `- ${route.name}: ${route.path}`)
+              .join('\n')}`
+        : ''
 
-    return `You own this Memex handoff. Complete only this handoff in the current project, using your ordinary configured tools, skills, plugins, and approval policy. Do not create another task or broaden the work. The realtime bridge records completion automatically; do not drain the handoff yourself.
+    return `You are the projectless coordinator for this Memex handoff. Complete only this handoff, using your ordinary configured tools, skills, plugins, and approval policy. The realtime bridge records completion after this coordinator finishes; do not drain the handoff yourself.
+
+Routing contract:
+- Call Codex list_projects once before deciding where the work belongs.
+- Use the title, description, requested destination, reference IDs, explicit paths, and optional hints below to identify any saved project that clearly owns the work. A requested destination is a hint, not a prerequisite.
+- When one or more saved projects clearly own the work, create the necessary downstream Codex task or tasks in those projects. Use a fresh worktree for a Git project and the saved project directly for a non-Git project.
+- Follow every downstream task to completion and coordinate its result before finishing this task. Do not return immediately after creating a task.
+- If no saved project clearly matches, complete the handoff yourself from this projectless user context. A missing or ambiguous project must not block the handoff by itself.
+- Do not broaden the requested work or create unrelated tasks.${projectHints}
 
 Memex handoff ID: ${handoff.id}
 Title: ${handoff.title}${destination}${timing}${references}
@@ -379,7 +365,7 @@ Description:
 ${handoff.descriptionMarkdown}`
 }
 
-async function routeHandoff(handoff, projectRoute) {
+async function routeHandoff(handoff) {
     let threadId = null
     let processingStarted = false
     try {
@@ -390,8 +376,7 @@ async function routeHandoff(handoff, projectRoute) {
         })
         processingStarted = true
         const result = await runCodexHandoff({
-            projectPath: projectRoute.path,
-            prompt: handoffPrompt(handoff),
+            prompt: handoffPrompt(handoff, sessionRecord.projectRoutes),
             onThreadCreated: async (createdThreadId) => {
                 threadId = createdThreadId
                 await callSupabaseRpc('register_codex_handoff_task', {
@@ -404,7 +389,7 @@ async function routeHandoff(handoff, projectRoute) {
                     message: `Codex task started for Memex handoff: ${handoff.title}`,
                     handoffId: handoff.id,
                     threadId: createdThreadId,
-                    projectPath: projectRoute.path,
+                    projectlessCoordinator: true,
                 })
             },
         })
@@ -414,7 +399,7 @@ async function routeHandoff(handoff, projectRoute) {
             p_processing_target: CODEX_PROCESSING_TARGET,
             p_response_metadata: {
                 codexThreadId: result.threadId,
-                projectPath: projectRoute.path,
+                projectlessCoordinator: true,
             },
         })
         notify('info', {
@@ -435,7 +420,7 @@ async function routeHandoff(handoff, projectRoute) {
                     p_error_message: message,
                     p_response_metadata: {
                         codexThreadId: threadId,
-                        projectPath: projectRoute.path,
+                        projectlessCoordinator: true,
                     },
                 })
             } catch (releaseFailure) {
@@ -467,18 +452,8 @@ function queueHandoffRouting(handoff) {
         return false
     }
 
-    const projectRoute = resolveProjectRoute(handoff)
-    if (!projectRoute) {
-        notify('warning', {
-            type: 'memex_handoff_route_unresolved',
-            message: `No unique local Codex project route matches: ${handoff.requestedDestinationText ?? handoff.title}`,
-            handoffId: handoff.id,
-        })
-        return false
-    }
-
     routingHandoffIds.add(handoff.id)
-    void routeHandoff(handoff, projectRoute)
+    void routeHandoff(handoff)
     return true
 }
 
@@ -778,13 +753,12 @@ const tools = [
     {
         name: 'configure_realtime_handoff_routes',
         description:
-            'Replace the local Codex project routes used to automatically turn approved Memex handoffs into Codex tasks.',
+            'Replace optional saved-project hints supplied to projectless realtime handoff coordinators.',
         inputSchema: {
             type: 'object',
             properties: {
                 projectRoutes: {
                     type: 'array',
-                    minItems: 1,
                     items: {
                         type: 'object',
                         properties: {
@@ -866,9 +840,6 @@ async function callTool(name, args) {
             throw new Error('Memex Realtime is not paired')
         }
         const projectRoutes = normalizeProjectRoutes(args.projectRoutes)
-        if (!projectRoutes.length) {
-            throw new Error('At least one absolute local project route is required')
-        }
         sessionRecord = { ...sessionRecord, projectRoutes }
         persistSessionRecord(sessionRecord)
         deferredHandoffIds.clear()
@@ -878,7 +849,7 @@ async function callTool(name, args) {
         const { pending, queuedHandoffIds } = await queuePendingHandoffRouting()
         return toolResult(
             { ...getStatus(), pendingHandoffs: pending, queuedHandoffIds },
-            `Configured ${projectRoutes.length} local Codex project route(s). ${queuedHandoffIds.length} pending handoff(s) were routed automatically.`,
+            `Configured ${projectRoutes.length} optional saved-project hint(s). ${queuedHandoffIds.length} pending handoff(s) were routed automatically.`,
         )
     }
     if (name === 'realtime_handoff_status') {

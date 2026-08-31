@@ -9,17 +9,12 @@ function handoffExecutionError(message, error) {
 }
 
 /**
- * Starts one ordinary local Codex task and keeps its app-server connection open
- * until the task reaches a terminal turn state.
+ * Starts one projectless Codex coordinator and keeps its app-server connection
+ * open until the task reaches a terminal turn state.
  */
-export function runCodexHandoff({
-    projectPath,
-    prompt,
-    onThreadCreated,
-}) {
+export function runCodexHandoff({ prompt, onThreadCreated }) {
     return new Promise((resolve, reject) => {
         const child = spawn('codex', ['app-server'], {
-            cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe'],
         })
         const output = readline.createInterface({ input: child.stdout })
@@ -51,7 +46,7 @@ export function runCodexHandoff({
                 id: 2,
                 method: 'thread/start',
                 params: {
-                    cwd: projectPath,
+                    cwd: null,
                     ephemeral: false,
                     serviceName: 'memex_realtime_handoffs',
                 },
@@ -64,7 +59,7 @@ export function runCodexHandoff({
                 method: 'turn/start',
                 params: {
                     threadId: id,
-                    cwd: projectPath,
+                    cwd: null,
                     input: [{ type: 'text', text: prompt }],
                 },
             })
@@ -91,7 +86,11 @@ export function runCodexHandoff({
             if (message.id === 2) {
                 const nextThreadId = message.result?.thread?.id
                 if (typeof nextThreadId !== 'string' || !nextThreadId) {
-                    finish(new Error('Codex app-server did not return a thread ID'))
+                    finish(
+                        new Error(
+                            'Codex app-server did not return a thread ID',
+                        ),
+                    )
                     return
                 }
                 threadId = nextThreadId
@@ -102,7 +101,12 @@ export function runCodexHandoff({
                 try {
                     await onThreadCreated(threadId)
                 } catch (error) {
-                    finish(handoffExecutionError('Could not register Codex task', error))
+                    finish(
+                        handoffExecutionError(
+                            'Could not register Codex task',
+                            error,
+                        ),
+                    )
                     return
                 }
                 startTurn(threadId)
@@ -144,10 +148,17 @@ export function runCodexHandoff({
             stderr = `${stderr}${chunk}`.slice(-4_000)
         })
         child.stdin.on('error', (error) => {
-            finish(handoffExecutionError('Codex app-server stdin failed', error))
+            finish(
+                handoffExecutionError('Codex app-server stdin failed', error),
+            )
         })
         child.on('error', (error) => {
-            finish(handoffExecutionError('Could not start Codex app-server', error))
+            finish(
+                handoffExecutionError(
+                    'Could not start Codex app-server',
+                    error,
+                ),
+            )
         })
         child.on('exit', (code) => {
             if (!finished) {
@@ -163,7 +174,9 @@ export function runCodexHandoff({
         })
 
         threadCreationTimeout = setTimeout(() => {
-            finish(new Error('Codex app-server timed out while creating a task'))
+            finish(
+                new Error('Codex app-server timed out while creating a task'),
+            )
         }, THREAD_CREATION_TIMEOUT_MS)
 
         send({

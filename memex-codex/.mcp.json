@@ -6,9 +6,13 @@
         },
         "memex-realtime": {
             "command": "node",
-            "args": ["./mcp/realtime-server.mjs"],
+            "args": [
+                "./mcp/realtime-server.mjs"
+            ],
             "cwd": ".",
-            "env_vars": ["CODEX_HOME"]
+            "env_vars": [
+                "CODEX_HOME"
+            ]
         }
     }
 }
