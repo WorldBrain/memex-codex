@@ -48,14 +48,20 @@ link without marking the handoff processed.
 In Memex, select Codex in Integrations and complete the OAuth pairing. Once
 Memex shows that Codex is connected, **Continue** opens the **Enable realtime
 handoffs** step. **Enable now** opens Codex with a prompt that runs
-`/memex:enable-realtime-handoffs` and pairs the plugin-local MCP. New approved
-handoffs start a projectless coordinator task while Codex keeps that MCP process
-running. The coordinator discovers relevant saved projects and delegates into
-them, or completes the work from its projectless user context when no project
-matches. A requested destination and locally configured project routes are
-optional hints, not launch requirements. The durable queue remains the source
-of truth: a handoff stays pending when realtime delivery is unavailable or local
-task startup fails. `/memex:fetch-handoffs` remains the manual fallback.
+`/memex:enable-realtime-handoffs` and pairs the plugin-local MCP. Each new
+approved voice memo starts exactly one coordinator task in the matching
+configured project and includes the complete source transcript in that task.
+The coordinator returns one structured child-task specification for every
+explicitly delimited handoff in the memo, and the bridge starts those child
+Codex tasks without creating additional Memex handoff rows. Project routing
+first uses the handoff's requested destination and can infer a unique explicit
+project mention from the source when that field is absent. If no unique route
+matches, the handoff stays pending. Handoff-created tasks suppress nested
+realtime auto-connections, and the durable queue atomically permits only one
+receiver to claim each handoff. When multiple plugin processes exist locally,
+the newest process becomes the active receiver and older processes remain on
+standby.
+`/memex:fetch-handoffs` remains the manual fallback.
 
 ## Authentication
 

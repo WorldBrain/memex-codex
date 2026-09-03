@@ -2,20 +2,47 @@ import { spawn } from 'node:child_process'
 import readline from 'node:readline'
 
 const THREAD_CREATION_TIMEOUT_MS = 30_000
+const COORDINATOR_MODEL = 'gpt-5.6-luna'
+const COORDINATOR_REASONING_EFFORT = 'medium'
 
 function handoffExecutionError(message, error) {
     const detail = error instanceof Error ? error.message : null
     return new Error(detail ? `${message}: ${detail}` : message)
 }
 
+function getFinalAgentText(turn) {
+    if (!Array.isArray(turn?.items)) return ''
+    return (
+        [...turn.items]
+            .reverse()
+            .find(
+                (item) =>
+                    item?.type === 'agentMessage' &&
+                    typeof item.text === 'string',
+            )?.text ?? ''
+    )
+}
+
 /**
- * Starts one projectless Codex coordinator and keeps its app-server connection
- * open until the task reaches a terminal turn state.
+ * Starts one ordinary local Codex task and keeps its app-server connection open
+ * until the task reaches a terminal turn state.
  */
-export function runCodexHandoff({ prompt, onThreadCreated }) {
+export function runCodexHandoff({
+    projectPath,
+    prompt,
+    onThreadCreated,
+    outputSchema,
+}) {
     return new Promise((resolve, reject) => {
+        const ownsProcessGroup = process.platform !== 'win32'
         const child = spawn('codex', ['app-server'], {
+            cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe'],
+            detached: ownsProcessGroup,
+            env: {
+                ...process.env,
+                MEMEX_REALTIME_AUTOCONNECT: '0',
+            },
         })
         const output = readline.createInterface({ input: child.stdout })
         let threadId = null
@@ -28,7 +55,17 @@ export function runCodexHandoff({ prompt, onThreadCreated }) {
             finished = true
             if (threadCreationTimeout) clearTimeout(threadCreationTimeout)
             output.close()
-            if (!child.killed) child.kill()
+            if (!child.killed) {
+                try {
+                    if (ownsProcessGroup && child.pid) {
+                        process.kill(-child.pid, 'SIGTERM')
+                    } else {
+                        child.kill()
+                    }
+                } catch {
+                    child.kill()
+                }
+            }
             if (result instanceof Error) reject(result)
             else resolve(result)
         }
@@ -46,7 +83,8 @@ export function runCodexHandoff({ prompt, onThreadCreated }) {
                 id: 2,
                 method: 'thread/start',
                 params: {
-                    cwd: null,
+                    cwd: projectPath,
+                    model: COORDINATOR_MODEL,
                     ephemeral: false,
                     serviceName: 'memex_realtime_handoffs',
                 },
@@ -59,7 +97,9 @@ export function runCodexHandoff({ prompt, onThreadCreated }) {
                 method: 'turn/start',
                 params: {
                     threadId: id,
-                    cwd: null,
+                    cwd: projectPath,
+                    effort: COORDINATOR_REASONING_EFFORT,
+                    ...(outputSchema ? { outputSchema } : {}),
                     input: [{ type: 'text', text: prompt }],
                 },
             })
@@ -133,7 +173,10 @@ export function runCodexHandoff({ prompt, onThreadCreated }) {
             ) {
                 const status = message.params?.turn?.status
                 if (status === 'completed') {
-                    finish({ threadId })
+                    finish({
+                        threadId,
+                        outputText: getFinalAgentText(message.params.turn),
+                    })
                 } else {
                     finish(
                         new Error(

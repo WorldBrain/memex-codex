@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import readline from 'node:readline'
+import { randomUUID } from 'node:crypto'
 import {
     clearInterval,
     clearTimeout,
@@ -23,9 +24,36 @@ const SESSION_DIR = path.join(
     'memex',
 )
 const SESSION_PATH = path.join(SESSION_DIR, 'realtime-session.json')
+const LEADER_PATH = path.join(SESSION_DIR, 'realtime-leader.json')
 const MAX_BUFFERED_HANDOFFS = 100
 const REALTIME_STATUS_TOUCH_INTERVAL_MS = 20_000
 const CODEX_PROCESSING_TARGET = 'codex_app_server'
+const AUTOCONNECT_ENABLED = process.env.MEMEX_REALTIME_AUTOCONNECT !== '0'
+const INSTANCE_ID = randomUUID()
+const COORDINATOR_OUTPUT_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+        tasks: {
+            type: 'array',
+            maxItems: 20,
+            items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    title: { type: 'string' },
+                    prompt: { type: 'string' },
+                    taskMode: {
+                        type: 'string',
+                        enum: ['planning', 'implementation'],
+                    },
+                },
+                required: ['title', 'prompt', 'taskMode'],
+            },
+        },
+    },
+    required: ['tasks'],
+}
 
 let initialized = false
 let sessionRecord = loadSessionRecord()
@@ -111,6 +139,28 @@ function removeSessionRecord() {
     }
 }
 
+function claimRealtimeLeadership() {
+    if (!AUTOCONNECT_ENABLED) return
+    fs.mkdirSync(SESSION_DIR, { recursive: true, mode: 0o700 })
+    const temporaryPath = `${LEADER_PATH}.${process.pid}.${INSTANCE_ID}.tmp`
+    fs.writeFileSync(
+        temporaryPath,
+        `${JSON.stringify({ instanceId: INSTANCE_ID, pid: process.pid })}\n`,
+        { mode: 0o600 },
+    )
+    fs.renameSync(temporaryPath, LEADER_PATH)
+}
+
+function isRealtimeLeader() {
+    if (!AUTOCONNECT_ENABLED) return true
+    try {
+        const leader = JSON.parse(fs.readFileSync(LEADER_PATH, 'utf8'))
+        return leader?.instanceId === INSTANCE_ID
+    } catch {
+        return false
+    }
+}
+
 function normalizeSupabaseSession(rawSession) {
     if (!rawSession || typeof rawSession !== 'object') {
         throw new Error('Pairing response did not include a Supabase session')
@@ -180,6 +230,60 @@ function normalizeProjectRoutes(routes) {
         seen.add(key)
         return [{ name, path: projectPath }]
     })
+}
+
+function normalizeDestinationText(value) {
+    return value
+        .toLocaleLowerCase()
+        .replace(/\b(project|repo|repository|folder)\b/g, ' ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ')
+}
+
+function resolveProjectRoute(handoff) {
+    const requestedDestination = handoff.requestedDestinationText
+    if (!sessionRecord) return null
+
+    if (typeof requestedDestination === 'string') {
+        const requested = normalizeDestinationText(requestedDestination)
+        if (requested) {
+            const matchingRoutes = sessionRecord.projectRoutes.filter(
+                (route) => {
+                    const aliases = [route.name, path.basename(route.path)]
+                    return aliases.some(
+                        (alias) =>
+                            normalizeDestinationText(alias) === requested,
+                    )
+                },
+            )
+            if (matchingRoutes.length === 1) return matchingRoutes[0]
+        }
+    }
+
+    const sourceContext = ` ${normalizeDestinationText(
+        [handoff.title, handoff.descriptionMarkdown, handoff.sourceText]
+            .filter((value) => typeof value === 'string' && value.trim())
+            .join(' '),
+    )} `
+    const inferredRoutes = sessionRecord.projectRoutes.filter((route) => {
+        const aliases = [route.name, path.basename(route.path)]
+            .map(normalizeDestinationText)
+            .filter(Boolean)
+        return aliases.some((alias) =>
+            [
+                ` for ${alias} `,
+                ` to ${alias} `,
+                ` in ${alias} `,
+                ` ${alias} project `,
+                ` ${alias} repo `,
+                ` ${alias} repository `,
+                ` ${alias} feature `,
+            ].some((phrase) => sourceContext.includes(phrase)),
+        )
+    })
+
+    return inferredRoutes.length === 1 ? inferredRoutes[0] : null
 }
 
 function sessionNeedsRefresh(record) {
@@ -285,6 +389,17 @@ function normalizeSocketMessage(raw) {
     }
 }
 
+function getHandoffSourceText(record) {
+    const spans = record?.thread?.source?.spans
+    if (!Array.isArray(spans)) return ''
+    return spans
+        .map((span) =>
+            typeof span?.text === 'string' ? span.text.trim() : '',
+        )
+        .filter(Boolean)
+        .join('\n\n')
+}
+
 function toPluginHandoff(record) {
     return {
         id: record.id,
@@ -292,6 +407,7 @@ function toPluginHandoff(record) {
         descriptionMarkdown: record.description_markdown ?? '',
         timingText: record.timing_text ?? null,
         requestedDestinationText: record.requested_destination_text ?? null,
+        sourceText: getHandoffSourceText(record),
         referenceContentEntityIds: record.reference_content_entity_ids ?? [],
         destinationId: record.destination_id ?? null,
         readyAt: record.ready_at ?? null,
@@ -334,7 +450,7 @@ async function callSupabaseRpc(name, payload) {
     return responsePayload
 }
 
-function handoffPrompt(handoff, projectRoutes) {
+function coordinatorPrompt(handoff) {
     const timing = handoff.timingText ? `\nTiming: ${handoff.timingText}` : ''
     const destination = handoff.requestedDestinationText
         ? `\nRequested destination: ${handoff.requestedDestinationText}`
@@ -342,30 +458,105 @@ function handoffPrompt(handoff, projectRoutes) {
     const references = handoff.referenceContentEntityIds.length
         ? `\nMemex reference IDs: ${handoff.referenceContentEntityIds.join(', ')}`
         : ''
-    const projectHints = projectRoutes.length
-        ? `\nOptional saved-project hints (confirm them with list_projects; they may be stale):\n${projectRoutes
-              .map((route) => `- ${route.name}: ${route.path}`)
-              .join('\n')}`
+    const source = handoff.sourceText
+        ? `\n\nComplete source transcript:\n${handoff.sourceText}`
         : ''
 
-    return `You are the projectless coordinator for this Memex handoff. Complete only this handoff, using your ordinary configured tools, skills, plugins, and approval policy. The realtime bridge records completion after this coordinator finishes; do not drain the handoff yourself.
+    return `You are the coordinator for one complete Memex voice-memo handoff. Your only job is to split the memo's explicitly delimited handoffs into separate Codex task specifications. The realtime bridge creates those tasks from your structured result.
 
-Routing contract:
-- Call Codex list_projects once before deciding where the work belongs.
-- Use the title, description, requested destination, reference IDs, explicit paths, and optional hints below to identify any saved project that clearly owns the work. A requested destination is a hint, not a prerequisite.
-- When one or more saved projects clearly own the work, create the necessary downstream Codex task or tasks in those projects. Use a fresh worktree for a Git project and the saved project directly for a non-Git project.
-- Follow every downstream task to completion and coordinate its result before finishing this task. Do not return immediately after creating a task.
-- If no saved project clearly matches, complete the handoff yourself from this projectless user context. A missing or ambiguous project must not block the handoff by itself.
-- Do not broaden the requested work or create unrelated tasks.${projectHints}
+Coordinator contract:
+- Do not investigate, implement, plan, or summarize the requested work yourself.
+- Treat spoken markers such as "there's a handoff", "handoff feature", "handoff start", "handoff complete", "send this off to Codex", and equivalent phrasing as task boundaries.
+- Return exactly one task for each explicitly handed-off workstream. Do not create tasks for surrounding reflections, content ideas, or personal to-dos that were not explicitly handed off.
+- Make every task prompt self-contained by preserving all requirements, examples, constraints, and requested investigation from its delimited transcript block.
+- Use taskMode "planning" when the speaker asks to investigate, research, plan, or explicitly says not to implement. Otherwise use "implementation".
+- Do not create additional Memex handoffs. The separate outputs are child Codex tasks inside this one Memex handoff.
+- Do not use tools. Return only the required structured result.
 
 Memex handoff ID: ${handoff.id}
 Title: ${handoff.title}${destination}${timing}${references}
 
 Description:
-${handoff.descriptionMarkdown}`
+${handoff.descriptionMarkdown}${source}`
 }
 
-async function routeHandoff(handoff) {
+function parseCoordinatorTasks(outputText) {
+    const parsed = JSON.parse(outputText)
+    if (!Array.isArray(parsed?.tasks)) {
+        throw new Error('Coordinator did not return a task list')
+    }
+    return parsed.tasks.flatMap((task) => {
+        const title = typeof task?.title === 'string' ? task.title.trim() : ''
+        const prompt =
+            typeof task?.prompt === 'string' ? task.prompt.trim() : ''
+        const taskMode =
+            task?.taskMode === 'planning' ? 'planning' : 'implementation'
+        return title && prompt ? [{ title, prompt, taskMode }] : []
+    })
+}
+
+function childTaskPrompt(handoff, task) {
+    const modeInstruction =
+        task.taskMode === 'planning'
+            ? 'Investigate and produce a concrete plan. Do not implement changes.'
+            : 'Implement the requested work end-to-end.'
+    return `This Codex task was created by the coordinator for Memex handoff ${handoff.id}.
+
+Task title: ${task.title}
+Task mode: ${task.taskMode}
+${modeInstruction}
+
+Task:
+${task.prompt}`
+}
+
+function startChildTask({ handoff, task, projectRoute }) {
+    return new Promise((resolve, reject) => {
+        let childThreadId = null
+        const completion = runCodexHandoff({
+            projectPath: projectRoute.path,
+            prompt: childTaskPrompt(handoff, task),
+            onThreadCreated: async (createdThreadId) => {
+                childThreadId = createdThreadId
+                notify('info', {
+                    type: 'memex_handoff_child_task_started',
+                    message: `Codex child task started: ${task.title}`,
+                    handoffId: handoff.id,
+                    threadId: createdThreadId,
+                    projectPath: projectRoute.path,
+                    taskTitle: task.title,
+                })
+                resolve({ threadId: createdThreadId, title: task.title })
+            },
+        })
+        completion
+            .then((result) => {
+                notify('info', {
+                    type: 'memex_handoff_child_task_completed',
+                    message: `Codex child task completed: ${task.title}`,
+                    handoffId: handoff.id,
+                    threadId: result.threadId,
+                    taskTitle: task.title,
+                })
+            })
+            .catch((error) => {
+                if (!childThreadId) {
+                    reject(error)
+                    return
+                }
+                notify('error', {
+                    type: 'memex_handoff_child_task_failed',
+                    message:
+                        error instanceof Error ? error.message : 'Task failed',
+                    handoffId: handoff.id,
+                    threadId: childThreadId,
+                    taskTitle: task.title,
+                })
+            })
+    })
+}
+
+async function routeHandoff(handoff, projectRoute) {
     let threadId = null
     let processingStarted = false
     try {
@@ -376,7 +567,9 @@ async function routeHandoff(handoff) {
         })
         processingStarted = true
         const result = await runCodexHandoff({
-            prompt: handoffPrompt(handoff, sessionRecord.projectRoutes),
+            projectPath: projectRoute.path,
+            prompt: coordinatorPrompt(handoff),
+            outputSchema: COORDINATOR_OUTPUT_SCHEMA,
             onThreadCreated: async (createdThreadId) => {
                 threadId = createdThreadId
                 await callSupabaseRpc('register_codex_handoff_task', {
@@ -389,17 +582,24 @@ async function routeHandoff(handoff) {
                     message: `Codex task started for Memex handoff: ${handoff.title}`,
                     handoffId: handoff.id,
                     threadId: createdThreadId,
-                    projectlessCoordinator: true,
+                    projectPath: projectRoute.path,
                 })
             },
         })
+        const tasks = parseCoordinatorTasks(result.outputText)
+        const childTasks = await Promise.all(
+            tasks.map((task) =>
+                startChildTask({ handoff, task, projectRoute }),
+            ),
+        )
 
         await callSupabaseRpc('drain_handoff', {
             p_handoff_id: handoff.id,
             p_processing_target: CODEX_PROCESSING_TARGET,
             p_response_metadata: {
                 codexThreadId: result.threadId,
-                projectlessCoordinator: true,
+                childCodexThreadIds: childTasks.map((task) => task.threadId),
+                projectPath: projectRoute.path,
             },
         })
         notify('info', {
@@ -407,6 +607,7 @@ async function routeHandoff(handoff) {
             message: `Memex handoff completed: ${handoff.title}`,
             handoffId: handoff.id,
             threadId: result.threadId,
+            childThreadIds: childTasks.map((task) => task.threadId),
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Task failed'
@@ -420,7 +621,7 @@ async function routeHandoff(handoff) {
                     p_error_message: message,
                     p_response_metadata: {
                         codexThreadId: threadId,
-                        projectlessCoordinator: true,
+                        projectPath: projectRoute.path,
                     },
                 })
             } catch (releaseFailure) {
@@ -452,8 +653,18 @@ function queueHandoffRouting(handoff) {
         return false
     }
 
+    const projectRoute = resolveProjectRoute(handoff)
+    if (!projectRoute) {
+        notify('warning', {
+            type: 'memex_handoff_route_unresolved',
+            message: `No unique local Codex project route matches: ${handoff.requestedDestinationText ?? handoff.title}`,
+            handoffId: handoff.id,
+        })
+        return false
+    }
+
     routingHandoffIds.add(handoff.id)
-    void routeHandoff(handoff)
+    void routeHandoff(handoff, projectRoute)
     return true
 }
 
@@ -499,6 +710,12 @@ function recordRealtimeHandoff(record) {
 }
 
 function handleSocketMessage(event) {
+    if (!isRealtimeLeader()) {
+        connectionState = 'standby'
+        connectionError = null
+        closeSocket()
+        return
+    }
     let message
     try {
         message = normalizeSocketMessage(event.data)
@@ -569,7 +786,13 @@ function closeSocket() {
 }
 
 function scheduleReconnect(generation) {
-    if (!sessionRecord || generation !== socketGeneration) return
+    if (
+        !sessionRecord ||
+        generation !== socketGeneration ||
+        !isRealtimeLeader()
+    ) {
+        return
+    }
     connectionState = 'reconnecting'
     const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempt)
     reconnectAttempt += 1
@@ -584,6 +807,11 @@ function scheduleReconnect(generation) {
 async function connectRealtime() {
     if (!sessionRecord) {
         connectionState = 'unpaired'
+        return
+    }
+    if (!isRealtimeLeader()) {
+        connectionState = 'standby'
+        connectionError = null
         return
     }
 
@@ -753,12 +981,13 @@ const tools = [
     {
         name: 'configure_realtime_handoff_routes',
         description:
-            'Replace optional saved-project hints supplied to projectless realtime handoff coordinators.',
+            'Replace the local Codex project routes used to automatically turn approved Memex handoffs into Codex tasks.',
         inputSchema: {
             type: 'object',
             properties: {
                 projectRoutes: {
                     type: 'array',
+                    minItems: 1,
                     items: {
                         type: 'object',
                         properties: {
@@ -824,6 +1053,7 @@ async function callTool(name, args) {
             args.projectRoutes ?? [],
         )
         persistSessionRecord(sessionRecord)
+        claimRealtimeLeadership()
         deferredHandoffIds.clear()
         await callSupabaseRpc('select_local_realtime_handoff_delivery', {
             p_destination_id: sessionRecord.handoffDestinationId,
@@ -840,8 +1070,14 @@ async function callTool(name, args) {
             throw new Error('Memex Realtime is not paired')
         }
         const projectRoutes = normalizeProjectRoutes(args.projectRoutes)
+        if (!projectRoutes.length) {
+            throw new Error(
+                'At least one absolute local project route is required',
+            )
+        }
         sessionRecord = { ...sessionRecord, projectRoutes }
         persistSessionRecord(sessionRecord)
+        claimRealtimeLeadership()
         deferredHandoffIds.clear()
         await callSupabaseRpc('select_local_realtime_handoff_delivery', {
             p_destination_id: sessionRecord.handoffDestinationId,
@@ -849,7 +1085,7 @@ async function callTool(name, args) {
         const { pending, queuedHandoffIds } = await queuePendingHandoffRouting()
         return toolResult(
             { ...getStatus(), pendingHandoffs: pending, queuedHandoffIds },
-            `Configured ${projectRoutes.length} optional saved-project hint(s). ${queuedHandoffIds.length} pending handoff(s) were routed automatically.`,
+            `Configured ${projectRoutes.length} local Codex project route(s). ${queuedHandoffIds.length} pending handoff(s) were routed automatically.`,
         )
     }
     if (name === 'realtime_handoff_status') {
@@ -892,7 +1128,8 @@ async function handleMessage(message) {
             capabilities: { tools: {}, logging: {} },
             serverInfo: { name: 'memex-realtime', version: SERVER_VERSION },
         })
-        if (sessionRecord) {
+        if (sessionRecord && AUTOCONNECT_ENABLED) {
+            claimRealtimeLeadership()
             connectRealtime().catch((error) => {
                 connectionState = 'reconnecting'
                 connectionError = error.message
