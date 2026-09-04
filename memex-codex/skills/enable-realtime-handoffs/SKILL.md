@@ -1,6 +1,6 @@
 ---
 name: enable-realtime-handoffs
-description: Pair the Memex Codex plugin's local MCP with Supabase Realtime so approved Memex handoffs arrive over a live WebSocket. Use for /memex:enable-realtime-handoffs or when setting up live handoff delivery.
+description: Pair the Memex Codex plugin's local MCP with Supabase Realtime so approved Memex handoffs arrive over a live WebSocket. The normal Memex skill performs this automatically; use this skill for explicit setup or repair.
 ---
 
 # Enable Realtime handoffs

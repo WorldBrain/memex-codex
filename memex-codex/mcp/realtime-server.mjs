@@ -25,6 +25,7 @@ const SESSION_DIR = path.join(
 )
 const SESSION_PATH = path.join(SESSION_DIR, 'realtime-session.json')
 const LEADER_PATH = path.join(SESSION_DIR, 'realtime-leader.json')
+const DISABLED_PATH = path.join(SESSION_DIR, 'realtime-disabled')
 const MAX_BUFFERED_HANDOFFS = 100
 const REALTIME_STATUS_TOUCH_INTERVAL_MS = 20_000
 const CODEX_PROCESSING_TARGET = 'codex_app_server'
@@ -62,7 +63,11 @@ let socketGeneration = 0
 let heartbeatTimer = null
 let reconnectTimer = null
 let reconnectAttempt = 0
-let connectionState = sessionRecord ? 'connecting' : 'unpaired'
+let connectionState = sessionRecord
+    ? 'connecting'
+    : fs.existsSync(DISABLED_PATH)
+      ? 'disabled'
+      : 'unpaired'
 let connectionError = null
 let subscriptionRef = null
 let requestRef = 0
@@ -134,6 +139,20 @@ function persistSessionRecord(record) {
 function removeSessionRecord() {
     try {
         fs.unlinkSync(SESSION_PATH)
+    } catch (error) {
+        if (error?.code !== 'ENOENT') throw error
+    }
+}
+
+function setAutomaticPairingDisabled(disabled) {
+    fs.mkdirSync(SESSION_DIR, { recursive: true, mode: 0o700 })
+    if (disabled) {
+        fs.closeSync(fs.openSync(DISABLED_PATH, 'w', 0o600))
+        fs.chmodSync(DISABLED_PATH, 0o600)
+        return
+    }
+    try {
+        fs.unlinkSync(DISABLED_PATH)
     } catch (error) {
         if (error?.code !== 'ENOENT') throw error
     }
@@ -942,6 +961,7 @@ async function listPendingHandoffs(limit) {
 function getStatus() {
     return {
         paired: Boolean(sessionRecord),
+        automaticPairingDisabled: fs.existsSync(DISABLED_PATH),
         connectionState,
         handoffDestinationId: sessionRecord?.handoffDestinationId ?? null,
         projectRoutes: sessionRecord?.projectRoutes ?? [],
@@ -1049,6 +1069,7 @@ async function callTool(name, args) {
             args.ticket,
             args.exchangeUrl,
         )
+        setAutomaticPairingDisabled(false)
         sessionRecord.projectRoutes = normalizeProjectRoutes(
             args.projectRoutes ?? [],
         )
@@ -1112,6 +1133,8 @@ async function callTool(name, args) {
         connectionError = null
         bufferedHandoffs = []
         removeSessionRecord()
+        setAutomaticPairingDisabled(true)
+        connectionState = 'disabled'
         return toolResult(getStatus(), 'Memex Realtime disconnected.')
     }
     throw new Error(`Unknown tool: ${name}`)

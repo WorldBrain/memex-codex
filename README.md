@@ -13,7 +13,7 @@ You can save, transcribe, summarize and search anything you come across. Website
 5. Select the `Memex Plugins` marketplace.
 6. Install `Memex`.
 7. Connect Memex when your client prompts for authentication.
-8. Return to Memex, select Codex in Integrations, complete pairing, then continue to enable realtime handoffs.
+8. Return to Memex and select Codex in Integrations. The first authenticated Memex operation automatically pairs the bundled Realtime MCP.
 9. You're done. You can now use Memex from your agent.
 
 ## Example prompts
@@ -45,10 +45,11 @@ link without marking the handoff processed.
 
 ## Realtime handoffs
 
-In Memex, select Codex in Integrations and complete the OAuth pairing. Once
-Memex shows that Codex is connected, **Continue** opens the **Enable realtime
-handoffs** step. **Enable now** opens Codex with a prompt that runs
-`/memex:enable-realtime-handoffs` and pairs the plugin-local MCP. Each new
+In Memex, select Codex in Integrations and complete the OAuth pairing. On the
+first authenticated Memex operation, Codex automatically exchanges a
+short-lived, single-use ticket with the plugin-local MCP; no separate Realtime
+login or enable command is required. `/memex:enable-realtime-handoffs` remains
+available for explicit repair. Each new
 approved voice memo starts exactly one coordinator task in the matching
 configured project and includes the complete source transcript in that task.
 The coordinator returns one structured child-task specification for every

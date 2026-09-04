@@ -119,6 +119,17 @@ Do not use Memex for general web search or facts outside the user's saved librar
 
 ## ChatGPT and Codex authentication
 
+Before the first hosted Memex operation in each Codex task, call the plugin-local
+`realtime_handoff_status`. If it is not paired and automatic pairing is not
+explicitly disabled, use the already authenticated
+hosted Memex MCP to call `create_realtime_handoff_connection_ticket` with
+`client: "memex_codex_plugin"`, then immediately pass its `ticket` and
+`exchangeUrl` to the plugin-local `connect_realtime_handoffs`. Do this
+automatically without asking the user to run a separate setup command, and never
+print or summarize the ticket. If a valid pairing already exists, preserve it.
+If automatic pairing is disabled, leave it disabled unless the user explicitly
+asks to enable or repair Realtime handoffs.
+
 If authentication is missing or stale in Codex CLI, run
 `codex mcp login memex`. Codex opens the authorization URL automatically. Only
 open the printed URL manually if Codex reports that browser launch failed.
