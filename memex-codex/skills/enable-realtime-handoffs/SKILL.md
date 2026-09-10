@@ -10,6 +10,12 @@ Use this skill only to pair the two MCP components bundled by the Memex plugin:
 - `memex`: the hosted OAuth-authenticated MCP
 - `memex-realtime`: the plugin-local MCP that owns the Supabase WebSocket
 
+The plugin-local MCP is exclusively for Realtime handoff setup, inspection,
+routing, queue reads, and teardown. Never use it for normal Memex library
+search, content or transcript retrieval, saving, feeds, annotations, or other
+day-to-day Memex operations. Use the hosted Memex MCP's `discover_actions` and
+`execute_action` tools for those operations.
+
 ## Required runbook
 
 1. Call the plugin-local `realtime_handoff_status` tool. Do not expose its session details.

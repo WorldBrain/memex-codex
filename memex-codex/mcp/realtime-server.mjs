@@ -19,6 +19,10 @@ import { runCodexHandoff } from './codex-app-server-client.mjs'
 
 const SERVER_VERSION = '0.1.0'
 const PROTOCOL_VERSION = '2025-06-18'
+const REALTIME_SERVER_INSTRUCTIONS =
+    'Realtime handoff setup and transport only. Do not use this server for normal Memex library search, content or transcript retrieval, saving, feeds, annotations, or other day-to-day Memex operations. For those operations, use the hosted Memex MCP and call discover_actions followed by execute_action. Use this server only to set up, inspect, configure, read, or disconnect Realtime handoff delivery.'
+const REALTIME_TOOL_SCOPE =
+    'Realtime handoff setup and transport only; never use for normal Memex library or content operations.'
 const SESSION_DIR = path.join(
     process.env.CODEX_HOME || path.join(os.homedir(), '.codex'),
     'memex',
@@ -974,8 +978,7 @@ function getStatus() {
 const tools = [
     {
         name: 'connect_realtime_handoffs',
-        description:
-            'Pair this plugin-local MCP with the authenticated Memex connection and start the Supabase Realtime handoff WebSocket.',
+        description: `${REALTIME_TOOL_SCOPE} Pair this plugin-local MCP with the authenticated Memex connection and start the Supabase Realtime handoff WebSocket.`,
         inputSchema: {
             type: 'object',
             properties: {
@@ -1000,8 +1003,7 @@ const tools = [
     },
     {
         name: 'configure_realtime_handoff_routes',
-        description:
-            'Replace the local Codex project routes used to automatically turn approved Memex handoffs into Codex tasks.',
+        description: `${REALTIME_TOOL_SCOPE} Replace the local Codex project routes used to automatically turn approved Memex handoffs into Codex tasks.`,
         inputSchema: {
             type: 'object',
             properties: {
@@ -1025,8 +1027,7 @@ const tools = [
     },
     {
         name: 'realtime_handoff_status',
-        description:
-            'Report whether the plugin-local Supabase Realtime handoff subscription is paired and connected.',
+        description: `${REALTIME_TOOL_SCOPE} Report whether the plugin-local Supabase Realtime handoff subscription is paired and connected.`,
         inputSchema: {
             type: 'object',
             properties: {},
@@ -1035,8 +1036,7 @@ const tools = [
     },
     {
         name: 'read_realtime_handoffs',
-        description:
-            'Read approved pending handoffs for this Codex destination from the durable queue and include recent WebSocket notifications.',
+        description: `${REALTIME_TOOL_SCOPE} Read approved pending handoffs for this Codex destination from the durable queue and include recent WebSocket notifications.`,
         inputSchema: {
             type: 'object',
             properties: {
@@ -1047,8 +1047,7 @@ const tools = [
     },
     {
         name: 'disconnect_realtime_handoffs',
-        description:
-            'Disconnect the Realtime WebSocket and remove the locally stored Memex Realtime session.',
+        description: `${REALTIME_TOOL_SCOPE} Disconnect the Realtime WebSocket and remove the locally stored Memex Realtime session.`,
         inputSchema: {
             type: 'object',
             properties: {},
@@ -1150,6 +1149,7 @@ async function handleMessage(message) {
             protocolVersion: params.protocolVersion || PROTOCOL_VERSION,
             capabilities: { tools: {}, logging: {} },
             serverInfo: { name: 'memex-realtime', version: SERVER_VERSION },
+            instructions: REALTIME_SERVER_INSTRUCTIONS,
         })
         if (sessionRecord && AUTOCONNECT_ENABLED) {
             claimRealtimeLeadership()
