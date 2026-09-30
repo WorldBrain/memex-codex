@@ -28,6 +28,8 @@
             "Save this URL into Memex and summarize related notes.",
             "Find saved highlights about MCP authentication in Memex."
         ],
-        "brandColor": "#16A34A"
+        "brandColor": "#16A34A",
+        "composerIcon": "./assets/memex-logo.svg",
+        "logo": "./assets/memex-logo.svg"
     }
 }
