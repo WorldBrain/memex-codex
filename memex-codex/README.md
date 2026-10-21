@@ -13,8 +13,9 @@ You can save, transcribe, summarize and search anything you come across. Website
 5. Select the `Memex Plugins` marketplace.
 6. Install `Memex`.
 7. Connect Memex when your client prompts for authentication.
-8. Return to Memex and select Codex in Integrations. The first authenticated Memex operation automatically pairs the bundled Realtime MCP.
-9. You're done. You can now use Memex from your agent.
+8. You're done. You can now use Memex from your agent.
+
+The plugin uses only the hosted Memex MCP with OAuth. No local companion process or Node.js installation is required.
 
 ## Example prompts
 
@@ -42,27 +43,6 @@ task owns only its handoff and drains it after the assigned work is complete.
 After Codex creates the task, the coordinator registers the returned thread ID
 with Memex. This gives the handoff a deterministic `codex://threads/<thread-id>`
 link without marking the handoff processed.
-
-## Realtime handoffs
-
-In Memex, select Codex in Integrations and complete the OAuth pairing. On the
-first authenticated Memex operation, Codex automatically exchanges a
-short-lived, single-use ticket with the plugin-local MCP; no separate Realtime
-login or enable command is required. `/memex:enable-realtime-handoffs` remains
-available for explicit repair. Each new
-approved voice memo starts exactly one coordinator task in the matching
-configured project and includes the complete source transcript in that task.
-The coordinator returns one structured child-task specification for every
-explicitly delimited handoff in the memo, and the bridge starts those child
-Codex tasks without creating additional Memex handoff rows. Project routing
-first uses the handoff's requested destination and can infer a unique explicit
-project mention from the source when that field is absent. If no unique route
-matches, the handoff stays pending. Handoff-created tasks suppress nested
-realtime auto-connections, and the durable queue atomically permits only one
-receiver to claim each handoff. When multiple plugin processes exist locally,
-the newest process becomes the active receiver and older processes remain on
-standby.
-`/memex:fetch-handoffs` remains the manual fallback.
 
 ## Authentication
 
